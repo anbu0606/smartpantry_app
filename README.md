@@ -1,5 +1,55 @@
 # smart-pantry
 
+## 🚀 Project Branching Protocol
+
+### 1. Branch Structure
+    *   **`main`**: Production branch. Contains the final, stable code ready for submission.
+    *   **`dev`**: Integration branch. The primary branch for daily development. All completed features are merged here.
+    *   **`test`**: Testing branch. Used for final integration testing, bug fixing, and pre-demo preparation.
+
+### 2. Feature Workflow
+**Core Principle: One feature, one branch.**
+
+1.  **Sync with `dev`**: Always start with the most up-to-date code.
+    ```bash
+    git checkout dev
+    git pull
+    
+2.  **Create a Feature Branch**: Branch off from dev. Use the naming convention feature/<your-name>-<feature-name>. For example, feature/jim-login.
+    ```bash
+    git checkout -b feature/jim-login
+    ```
+
+3.  **Develop Locally**: Make small, frequent commits with descriptive messages.
+4.  **Push and Merge**:
+    *   Push your branch to the remote repository: 
+        ```bash
+        git push origin feature/login-jim
+        ```
+    *   Open a **Pull Request (PR)** on GitHub/GitLab targeting the `dev` branch.
+    *   Assign at least one teammate for **Code Review**. Merge only after their approval.
+    *   Clean Up: Once merged, delete your feature branch (both locally and remotely) and return to dev for your next task.
+
+### 3. The 3 "Don'ts" of Collaboration
+    *   No Direct Pushes: Never commit directly to dev or main. All changes must go through a PR.
+    *   No Broken Code: Never merge code that fails to compile or contains obvious errors.
+    *   No Long-Lived Branches: Keep feature branches short-lived (ideally under 3 days). If a feature is too large, break it down into smaller sub-tasks.
+
+### 4. Conflict Resolution
+    If you encounter a merge conflict during a PR:
+
+    *   Switch to your local feature branch.
+    *   Run git merge dev (or git pull origin dev).
+    *   Resolve the conflicts locally, test the code to ensure it works, commit the changes, and push again.
+
+
+
+
+
+
+
+
+
 
 
 ## Getting started
