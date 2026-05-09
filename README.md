@@ -3,7 +3,7 @@
 ## 🚀 Project Branching Protocol
 
 ### 1. Branch Structure
-    *   **`main`**: Production branch. Contains the final, stable code ready for submission.
+    *   **`master`**: Production branch. Contains the final, stable code ready for submission.
     *   **`dev`**: Integration branch. The primary branch for daily development. All completed features are merged here.
     *   **`test`**: Testing branch. Used for final integration testing, bug fixing, and pre-demo preparation.
 
@@ -24,7 +24,7 @@
 4.  **Push and Merge**:
     *   Push your branch to the remote repository: 
         ```bash
-        git push origin feature/login-jim
+        git push origin feature/jim-login
         ```
     *   Open a **Pull Request (PR)** on GitHub/GitLab targeting the `dev` branch.
     *   Assign at least one teammate for **Code Review**. Merge only after their approval.
