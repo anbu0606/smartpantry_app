@@ -67,6 +67,7 @@ private const val ItemNotes          = "Store in coldest part of fridge, away fr
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FoodDetailScreen(
+    foodId: String? = null,
     onNavigateBack: () -> Unit,
     onNavigateToEdit: () -> Unit,
 ) {

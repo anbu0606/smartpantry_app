@@ -103,7 +103,7 @@ private val initialItems = listOf(
 @Composable
 fun InventoryListScreen(
     onNavigateToAddFood: () -> Unit,
-    onNavigateToFoodDetail: () -> Unit = {},
+    onNavigateToFoodDetail: (String) -> Unit = {},
 ) {
 
     // ── Mutable list — survives recompositions; swipe-deletes are permanent
@@ -213,7 +213,7 @@ fun InventoryListScreen(
                         quantity        = item.quantity,
                         expiryDate      = item.expiryLabel,
                         daysUntilExpiry = item.daysUntilExpiry,
-                        onEdit          = { onNavigateToFoodDetail() },
+                        onEdit          = { onNavigateToFoodDetail("sample-1") }, // TODO(Anbu Day 4): pass real item.id
                         onDelete        = { foodItems.remove(item) },
                     )
                 }

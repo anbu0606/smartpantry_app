@@ -8,10 +8,10 @@
             <InsightsFilterSettings>
               <option name="connection">
                 <ConnectionSetting>
-                  <option name="appId" value="PLACEHOLDER" />
-                  <option name="mobileSdkAppId" value="" />
-                  <option name="projectId" value="" />
-                  <option name="projectNumber" value="" />
+                  <option name="appId" value="com.lab03g10.smartpantry" />
+                  <option name="mobileSdkAppId" value="1:40336806745:android:fc3d15a9761cc9208ab248" />
+                  <option name="projectId" value="smartpantry-f9b58" />
+                  <option name="projectNumber" value="40336806745" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
