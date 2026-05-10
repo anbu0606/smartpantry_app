@@ -1,0 +1,55 @@
+package com.lab03g10.smartpantry.data.repository
+
+import com.lab03g10.smartpantry.data.local.dao.FoodItemDao
+import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
+import com.lab03g10.smartpantry.domain.repo.FoodRepository
+import kotlinx.coroutines.flow.Flow
+import javax.inject.Inject
+import javax.inject.Singleton
+
+
+/**
+ * @(#) FoodRepositoryImpl.kt 1.0 2026-05-10
+ * Copyright (c) 2026, Steve Zheng. ALL right reserved.
+ * Steve Zheng PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ */
+@Singleton
+class FoodRepositoryImpl @Inject constructor(
+    private val dao: FoodItemDao,
+    ) : FoodRepository {
+    override fun observeAll(): Flow<List<FoodItemEntity>> {
+        TODO("Not yet implemented")
+    }
+
+    override fun observeUseToday(today: Long): Flow<List<FoodItemEntity>> {
+        TODO("Not yet implemented")
+    }
+
+    override fun observeByCategory(today: Long): Flow<List<FoodItemEntity>> {
+        TODO("Not yet implemented")
+    }
+
+    override fun observeById(id: String): Flow<FoodItemEntity?> {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun findByBarcode(barcode: String): FoodItemEntity? {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun upsert(item: FoodItemEntity) {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun delete(id: String) {
+        TODO("Not yet implemented")
+    }
+
+    override suspend fun markConsumed(id: String) {
+        dao.markConsumed(id, at = System.currentTimeMillis())
+    }
+
+    override suspend fun markWasted(id: String) {
+        dao.markWasted(id, at = System.currentTimeMillis())
+    }
+}
