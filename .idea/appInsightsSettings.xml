@@ -9,9 +9,9 @@
               <option name="connection">
                 <ConnectionSetting>
                   <option name="appId" value="com.lab03g10.smartpantry" />
-                  <option name="mobileSdkAppId" value="1:40336806745:android:fc3d15a9761cc9208ab248" />
-                  <option name="projectId" value="smartpantry-f9b58" />
-                  <option name="projectNumber" value="40336806745" />
+                  <option name="mobileSdkAppId" value="1:218320707597:android:6822b2d17f0036a347b544" />
+                  <option name="projectId" value="smartpantry-9de23" />
+                  <option name="projectNumber" value="218320707597" />
                 </ConnectionSetting>
               </option>
               <option name="signal" value="SIGNAL_UNSPECIFIED" />
