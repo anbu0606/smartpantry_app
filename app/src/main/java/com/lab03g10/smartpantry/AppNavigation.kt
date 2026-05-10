@@ -42,15 +42,19 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
 import androidx.navigation.NavGraph.Companion.findStartDestination
+import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.navArgument
 
 
 private object Route {
@@ -58,22 +62,29 @@ private object Route {
     const val REGISTRATION   = "registration"
     const val DASHBOARD      = "dashboard"
     const val INVENTORY_LIST = "inventory_list"
-    const val ADD_EDIT_FOOD  = "add_edit_food"
     const val SCANNER        = "scanner"
     const val ANALYTICS      = "analytics"
     const val STORAGE_MONITOR = "storage_monitor"
     const val SHOPPING_LIST  = "shopping_list"
     const val PROFILE        = "profile"
     const val ADD_SENSOR           = "add_sensor"
-    const val FOOD_DETAIL          = "food_detail"
     const val NOTIFICATIONS        = "notifications"
     const val WASTE_LOG            = "waste_log"
     const val BARCODE_SCAN_RESULT  = "barcode_scan_result"
     const val EXPIRY_CALENDAR      = "expiry_calendar"
-    const val SENSOR_DETAIL        = "sensor_detail"
-    const val EDIT_SENSOR          = "edit_sensor"
     const val FORGOT_PASSWORD      = "forgot_password"
     const val ONBOARDING           = "onboarding"
+
+    const val FOOD_DETAIL    = "food_detail/{foodId}"
+    const val EDIT_SENSOR    = "edit_sensor/{sensorId}"
+    const val SENSOR_DETAIL  = "sensor_detail/{sensorId}"
+    const val ADD_EDIT_FOOD  = "add_edit_food?foodId={foodId}"
+
+    fun foodDetail(id: String)   = "food_detail/$id"
+    fun editSensor(id: String)   = "edit_sensor/$id"
+    fun sensorDetail(id: String) = "sensor_detail/$id"
+    fun addFood()                = "add_edit_food"
+    fun editFood(id: String)     = "add_edit_food?foodId=$id"
 }
 
 //Bottom navigation tabs
@@ -92,12 +103,12 @@ private enum class BottomTab(
 
 private val bottomBarRoutes: Set<String> = BottomTab.entries.map { it.route }.toSet()
 
-
 @Composable
 fun AppNavigation() {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
+    val isAuthenticated by remember { mutableStateOf(false) } // TODO(Willy Day 5): replace with authViewModel.authState.collectAsState()
 
     Scaffold(
         bottomBar = {
@@ -119,7 +130,7 @@ fun AppNavigation() {
     ) { innerPadding ->
         NavHost(
             navController    = navController,
-            startDestination = Route.LOGIN,
+            startDestination = if (isAuthenticated) Route.DASHBOARD else Route.LOGIN,
             modifier         = Modifier.padding(innerPadding),
         ) {
             composable(Route.LOGIN) {
@@ -157,8 +168,8 @@ fun AppNavigation() {
             }
             composable(Route.INVENTORY_LIST) {
                 InventoryListScreen(
-                    onNavigateToAddFood    = { navController.navigate(Route.ADD_EDIT_FOOD) },
-                    onNavigateToFoodDetail = { navController.navigate(Route.FOOD_DETAIL) },
+                    onNavigateToAddFood    = { navController.navigate(Route.addFood()) },
+                    onNavigateToFoodDetail = { id -> navController.navigate(Route.foodDetail(id)) },
                 )
             }
             composable(Route.SCANNER) {
@@ -176,9 +187,19 @@ fun AppNavigation() {
             composable(Route.PROFILE) {
                 ProfileScreen()
             }
-
-            composable(Route.ADD_EDIT_FOOD) {
-                AddEditFoodScreen(onNavigateBack = { navController.popBackStack() })
+            composable(
+                route = Route.ADD_EDIT_FOOD,
+                arguments = listOf(navArgument("foodId") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                })
+            ) { backStackEntry ->
+                val foodId = backStackEntry.arguments?.getString("foodId")
+                AddEditFoodScreen(
+                    foodId = foodId,
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
             composable(Route.STORAGE_MONITOR) {
                 StorageMonitorScreen(
@@ -192,10 +213,15 @@ fun AppNavigation() {
             composable(Route.ADD_SENSOR) {
                 AddSensorScreen(onNavigateBack = { navController.popBackStack() })
             }
-            composable(Route.FOOD_DETAIL) {
+            composable(
+                route = Route.FOOD_DETAIL,
+                arguments = listOf(navArgument("foodId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val foodId = backStackEntry.arguments?.getString("foodId")
                 FoodDetailScreen(
-                    onNavigateBack    = { navController.popBackStack() },
-                    onNavigateToEdit  = { navController.navigate(Route.ADD_EDIT_FOOD) },
+                    foodId = foodId,
+                    onNavigateBack = { navController.popBackStack() },
+                    onNavigateToEdit = { foodId?.let { navController.navigate(Route.editFood(it)) } },
                 )
             }
             composable(Route.NOTIFICATIONS) {
@@ -213,14 +239,26 @@ fun AppNavigation() {
             composable(Route.EXPIRY_CALENDAR) {
                 ExpiryCalendarScreen(onNavigateBack = { navController.popBackStack() })
             }
-            composable(Route.SENSOR_DETAIL) {
+            composable(
+                route = Route.SENSOR_DETAIL,
+                arguments = listOf(navArgument("sensorId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val sensorId = backStackEntry.arguments?.getString("sensorId")
                 SensorDetailScreen(
+                    sensorId         = sensorId,
                     onNavigateBack   = { navController.popBackStack() },
-                    onNavigateToEdit = { navController.navigate(Route.EDIT_SENSOR) },
+                    onNavigateToEdit = { sensorId?.let { navController.navigate(Route.editSensor(it)) } },
                 )
             }
-            composable(Route.EDIT_SENSOR) {
-                EditSensorScreen(onNavigateBack = { navController.popBackStack() })
+            composable(
+                route = Route.EDIT_SENSOR,
+                arguments = listOf(navArgument("sensorId") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val sensorId = backStackEntry.arguments?.getString("sensorId")
+                EditSensorScreen(
+                    sensorId       = sensorId,
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
             composable(Route.FORGOT_PASSWORD) {
                 ForgotPasswordScreen(onNavigateBack = { navController.popBackStack() })

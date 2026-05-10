@@ -51,32 +51,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 
 private val SectionGreen = Color(0xFF0F6E56)
 private val DeleteRed    = Color(0xFFBA1A1A)
-
-
-/**
- * Predefined storage environment categories
- */
-private enum class EditEnvironmentType(
-    val label: String,
-    val emoji: String,
-    val description: String,
-    val suggestedThresholdC: Float,
-    val suggestedMaxLux: Float,
-) {
-    REFRIGERATOR("Refrigerator", "🧊", "Sealed cooling unit, 1–7 °C",           7f,   50f),
-    FREEZER     ("Freezer",      "❄️", "Sealed freezing, −20 to −15 °C",        -15f,  50f),
-    PANTRY      ("Pantry",       "🌡", "Enclosed room-temp storage, 15–25 °C",  28f,  300f),
-    CUPBOARD    ("Cupboard",     "🚪", "Enclosed cabinet, 18–28 °C",            25f,  100f),
-    CELLAR      ("Cellar",       "🏚", "Cool underground space, 8–15 °C",       18f,   50f),
-    OPEN_SHELF  ("Open Shelf",   "📦", "Exposed ambient storage",               35f,  800f),
-    GARAGE      ("Garage",       "🏠", "Unregulated outdoor-adjacent space",    40f,  600f),
-    CUSTOM      ("Custom",       "⚙️", "Define your own environment type",      30f,  500f),
-}
-
 
 /**
  * Edit screen for an existing paired sensors
@@ -86,9 +65,12 @@ private enum class EditEnvironmentType(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun EditSensorScreen(onNavigateBack: () -> Unit) {
+fun EditSensorScreen(
+    sensorId: String? = null,
+    onNavigateBack: () -> Unit
+) {
     var sensorName       by remember { mutableStateOf("Pantry") }
-    var selectedType     by remember { mutableStateOf(EditEnvironmentType.PANTRY) }
+    var selectedType     by remember { mutableStateOf(EnvironmentType.PANTRY) }
     var threshold        by remember { mutableFloatStateOf(28f) }
     var luxThreshold     by remember { mutableFloatStateOf(selectedType.suggestedMaxLux) }
     var showDeleteDialog by remember { mutableStateOf(false) }
@@ -213,7 +195,7 @@ fun EditSensorScreen(onNavigateBack: () -> Unit) {
             )
 
             // 2 column environment type cards
-            val typeList = EditEnvironmentType.entries
+            val typeList = EnvironmentType.entries
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 typeList.chunked(2).forEach { rowTypes ->
                     Row(
@@ -416,7 +398,7 @@ fun EditSensorScreen(onNavigateBack: () -> Unit) {
 
 @Composable
 private fun EnvironmentTypeCard(
-    type:     EditEnvironmentType,
+    type:     EnvironmentType,
     selected: Boolean,
     onClick:  () -> Unit,
     modifier: Modifier = Modifier,

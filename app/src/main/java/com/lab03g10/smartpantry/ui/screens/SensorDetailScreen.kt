@@ -90,6 +90,7 @@ private const val weekLuxMax       = 500f
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SensorDetailScreen(
+    sensorId: String? = null,
     onNavigateBack: () -> Unit,
     onNavigateToEdit: () -> Unit,
 ) {

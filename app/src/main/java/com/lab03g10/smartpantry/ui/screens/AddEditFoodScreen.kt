@@ -91,6 +91,7 @@ private val todayStartMillis      = 1_744_848_000_000L  // 2026-04-17
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun AddEditFoodScreen(
+    foodId: String? = null,
     isEditMode: Boolean = false,
     onNavigateBack: () -> Unit,
 ) {

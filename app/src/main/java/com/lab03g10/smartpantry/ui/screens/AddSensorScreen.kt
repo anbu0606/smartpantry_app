@@ -52,6 +52,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 import kotlinx.coroutines.delay
 
@@ -80,26 +81,6 @@ private val discoveredSensors = listOf(
     DiscoveredSensor("TempHumid-B891",  SignalStrength.MEDIUM),
     DiscoveredSensor("EnvMonitor-C204", SignalStrength.WEAK),
 )
-
-private enum class EnvironmentType(
-    val label: String,
-    val emoji: String,
-    val description: String,
-    val suggestedThresholdC: Float,
-    val suggestedMaxLux: Float,
-) {
-    
-    //Predefied thresholds
-    REFRIGERATOR("Refrigerator", "🧊", "Sealed cooling unit, 1–7 °C",           7f,   50f),
-    FREEZER     ("Freezer",      "❄️", "Sealed freezing, −20 to −15 °C",        -15f,  50f),
-    PANTRY      ("Pantry",       "🌡", "Enclosed room-temp storage, 15–25 °C",  28f,  300f),
-    CUPBOARD    ("Cupboard",     "🚪", "Enclosed cabinet, 18–28 °C",            25f,  100f),
-    CELLAR      ("Cellar",       "🏚", "Cool underground space, 8–15 °C",       18f,   50f),
-    OPEN_SHELF  ("Open Shelf",   "📦", "Exposed ambient storage",               35f,  800f),
-    GARAGE      ("Garage",       "🏠", "Unregulated outdoor-adjacent space",    40f,  600f),
-    CUSTOM      ("Custom",       "⚙️", "Define your own environment type",      30f,  500f),
-}
-
 
 private val SectionGreen = Color(0xFF0F6E56)
 
