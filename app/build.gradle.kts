@@ -1,18 +1,16 @@
 plugins {
     alias(libs.plugins.android.application)
+    alias(libs.plugins.kotlin.android)         // explicit (Built-in Kotlin is disabled in gradle.properties)
     alias(libs.plugins.kotlin.compose)
-    alias(libs.plugins.ksp)
+    alias(libs.plugins.kotlin.kapt)            // KAPT for Hilt processor (KSP2 has Hilt incompat bug)
+    alias(libs.plugins.ksp)                    // KSP for Room and Moshi processors
     alias(libs.plugins.dagger.hilt.android)
-    alias(libs.plugins.google.services)  // Re-enable after Phase 6: drop google-services.json into app/
+    alias(libs.plugins.google.services)
 }
 
 android {
     namespace = "com.lab03g10.smartpantry"
-    compileSdk {
-        version = release(36) {
-            minorApiLevel = 1
-        }
-    }
+    compileSdk = 36                            // classic DSL (newDsl=false in gradle.properties)
 
     defaultConfig {
         applicationId = "com.lab03g10.smartpantry"
@@ -79,12 +77,15 @@ dependencies {
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
     debugImplementation(libs.androidx.compose.ui.tooling)
     debugImplementation(libs.androidx.compose.ui.test.manifest)
-// Hilt
+// Hilt — using KAPT instead of KSP because KSP2 has a known
+// "unexpected jvm signature V" bug processing Hilt-generated Java code
+// (KspAAWorkerAction failure). KAPT bypasses KSP entirely for Hilt.
+// Room and Moshi continue to use KSP below.
     implementation(libs.hilt.android)
-    ksp(libs.hilt.compiler)
+    kapt(libs.hilt.compiler)
     implementation(libs.androidx.hilt.navigation.compose)
     implementation(libs.androidx.hilt.work)
-    ksp(libs.androidx.hilt.compiler)
+    kapt(libs.androidx.hilt.compiler)
 
 // Lifecycle ViewModel + Compose
     implementation(libs.androidx.lifecycle.viewmodel.compose)
