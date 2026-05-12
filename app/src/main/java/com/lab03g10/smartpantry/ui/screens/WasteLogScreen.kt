@@ -41,39 +41,55 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 
-private val ConsumedGreen = Color(0xFF2E7D32)
 private val WastedRed     = Color(0xFFBA1A1A)
-private val ConsumedBg    = Color(0xFFE8F5E9)
 private val WastedBg      = Color(0xFFFFEDEA)
+private val ImpactOrange  = Color(0xFFE65100)   // CO₂e summary card
 private val LabelGrey     = Color(0xFF888888)
+
+// Per-reason badge palette — used on each waste row to show why the item was discarded
+private val ExpiredBadgeFg = Color(0xFFE65100); private val ExpiredBadgeBg = Color(0xFFFFE0B2)
+private val SpoiledBadgeFg = Color(0xFF6A1B9A); private val SpoiledBadgeBg = Color(0xFFE1BEE7)
+private val OtherBadgeFg   = Color(0xFF455A64); private val OtherBadgeBg   = Color(0xFFCFD8DC)
 
 private val SelectedChipBg     = Color(0xFFC8E6C9)
 private val SelectedChipBorder = Color(0xFF2E7D32)
 private val SelectedChipText   = Color(0xFF085041)
 private val UnselectedChipBorder = Color(0xFFCCCCCC)
 
-private enum class DisposalType { CONSUMED, WASTED }
+// WasteLog is waste-only (consumed items live on FoodItemEntity.consumed instead).
+// See day2-room-di-checklist §1.5 design decision.
+private enum class WasteReason(
+    val label: String,
+    val badgeFg: Color,
+    val badgeBg: Color,
+) {
+    EXPIRED("Expired", ExpiredBadgeFg, ExpiredBadgeBg),
+    SPOILED("Spoiled", SpoiledBadgeFg, SpoiledBadgeBg),
+    OTHER  ("Other",   OtherBadgeFg,   OtherBadgeBg),
+}
 
 private data class WasteEntry(
     val id: String,
     val foodName: String,
     val category: String,
-    val type: DisposalType,
+    val reason: WasteReason,
     val date: String,
     val monthGroup: String,
 )
-//predefined data
+// Hardcoded prototype sample. Abinaya Day 3-5 will replace with Flow<List<WasteLogEntity>>
+// from WasteRepository. All entries are wasted; reason values mirror WasteLogEntity.reason
+// ("EXPIRED" / "SPOILED" / "OTHER").
 private val wasteEntries = listOf(
-    WasteEntry("e1",  "Full Cream Milk",  "Dairy",      DisposalType.CONSUMED, "18 Apr 2026", "APRIL 2026"),
-    WasteEntry("e2",  "Baby Spinach",     "Produce",    DisposalType.WASTED,   "17 Apr 2026", "APRIL 2026"),
-    WasteEntry("e3",  "Chicken Breast",   "Meat",       DisposalType.CONSUMED, "15 Apr 2026", "APRIL 2026"),
-    WasteEntry("e4",  "Cheddar Cheese",   "Dairy",      DisposalType.WASTED,   "14 Apr 2026", "APRIL 2026"),
-    WasteEntry("e5",  "Basmati Rice",     "Dry Goods",  DisposalType.CONSUMED, "10 Apr 2026", "APRIL 2026"),
-    WasteEntry("e6",  "Carrots",          "Produce",    DisposalType.CONSUMED, "28 Mar 2026", "MARCH 2026"),
-    WasteEntry("e7",  "Greek Yogurt",     "Dairy",      DisposalType.WASTED,   "25 Mar 2026", "MARCH 2026"),
-    WasteEntry("e8",  "Orange Juice",     "Beverages",  DisposalType.WASTED,   "22 Mar 2026", "MARCH 2026"),
-    WasteEntry("e9",  "Pasta",            "Dry Goods",  DisposalType.CONSUMED, "18 Mar 2026", "MARCH 2026"),
-    WasteEntry("e10", "Butter",           "Dairy",      DisposalType.CONSUMED, "10 Mar 2026", "MARCH 2026"),
+    WasteEntry("e1",  "Baby Spinach",    "Produce",    WasteReason.EXPIRED, "17 Apr 2026", "APRIL 2026"),
+    WasteEntry("e2",  "Cheddar Cheese",  "Dairy",      WasteReason.SPOILED, "14 Apr 2026", "APRIL 2026"),
+    WasteEntry("e3",  "Greek Yogurt",    "Dairy",      WasteReason.EXPIRED, "12 Apr 2026", "APRIL 2026"),
+    WasteEntry("e4",  "Orange Juice",    "Beverages",  WasteReason.SPOILED, "10 Apr 2026", "APRIL 2026"),
+    WasteEntry("e5",  "Bread Loaf",      "Grains",     WasteReason.EXPIRED, "08 Apr 2026", "APRIL 2026"),
+    WasteEntry("e6",  "Leftover Curry",  "Other",      WasteReason.OTHER,   "05 Apr 2026", "APRIL 2026"),
+    WasteEntry("e7",  "Strawberries",    "Produce",    WasteReason.SPOILED, "28 Mar 2026", "MARCH 2026"),
+    WasteEntry("e8",  "Ground Beef",     "Meat",       WasteReason.SPOILED, "25 Mar 2026", "MARCH 2026"),
+    WasteEntry("e9",  "Almond Milk",     "Dairy",      WasteReason.EXPIRED, "22 Mar 2026", "MARCH 2026"),
+    WasteEntry("e10", "Stale Crackers",  "Grains",     WasteReason.OTHER,   "18 Mar 2026", "MARCH 2026"),
 )
 
 private val groupOrder = listOf("APRIL 2026", "MARCH 2026")
@@ -86,9 +102,10 @@ fun WasteLogScreen(onNavigateBack: () -> Unit) {
 
     val filteredEntries = wasteEntries.filter { entry ->
         when (selectedFilter) {
-            "Consumed" -> entry.type == DisposalType.CONSUMED
-            "Wasted"   -> entry.type == DisposalType.WASTED
-            else       -> true
+            "Expired" -> entry.reason == WasteReason.EXPIRED
+            "Spoiled" -> entry.reason == WasteReason.SPOILED
+            "Other"   -> entry.reason == WasteReason.OTHER
+            else      -> true
         }
     }
 
@@ -128,7 +145,10 @@ fun WasteLogScreen(onNavigateBack: () -> Unit) {
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
 
-            // summary stats
+            // summary stats — waste-only after the WasteLogEntity schema decision
+            // (left card: total waste count; right card: estimated CO₂e impact).
+            // Numbers below are hardcoded for prototype; Abinaya Day 3 wires them to
+            // WasteRepository.observeAll().count() and the CO₂e lookup table aggregation.
             item {
                 Row(
                     modifier              = Modifier.fillMaxWidth(),
@@ -149,15 +169,15 @@ fun WasteLogScreen(onNavigateBack: () -> Unit) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
-                                text  = "6",
+                                text  = "10",
                                 style = MaterialTheme.typography.headlineLarge.copy(
                                     fontSize   = 32.sp,
                                     fontWeight = FontWeight.Light,
                                 ),
-                                color = ConsumedGreen,
+                                color = WastedRed,
                             )
                             Text(
-                                text  = "Consumed",
+                                text  = "Items wasted",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = LabelGrey,
                             )
@@ -178,15 +198,15 @@ fun WasteLogScreen(onNavigateBack: () -> Unit) {
                             horizontalAlignment = Alignment.CenterHorizontally,
                         ) {
                             Text(
-                                text  = "4",
+                                text  = "~245 g",
                                 style = MaterialTheme.typography.headlineLarge.copy(
                                     fontSize   = 32.sp,
                                     fontWeight = FontWeight.Light,
                                 ),
-                                color = WastedRed,
+                                color = ImpactOrange,
                             )
                             Text(
-                                text  = "Wasted",
+                                text  = "CO₂e impact",
                                 style = MaterialTheme.typography.labelSmall,
                                 color = LabelGrey,
                             )
@@ -200,7 +220,7 @@ fun WasteLogScreen(onNavigateBack: () -> Unit) {
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    listOf("All", "Consumed", "Wasted").forEach { filter ->
+                    listOf("All", "Expired", "Spoiled", "Other").forEach { filter ->
                         WasteFilterChip(
                             label    = filter,
                             selected = filter == selectedFilter,
@@ -290,15 +310,15 @@ private fun WasteEntryRow(entry: WasteEntry) {
             ) {
                 Surface(
                     shape = CircleShape,
-                    color = if (entry.type == DisposalType.CONSUMED) ConsumedBg else WastedBg,
+                    color = entry.reason.badgeBg,
                 ) {
                     Text(
-                        text     = if (entry.type == DisposalType.CONSUMED) "Consumed" else "Wasted",
+                        text     = entry.reason.label,
                         modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
                         style    = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.SemiBold,
                         ),
-                        color    = if (entry.type == DisposalType.CONSUMED) ConsumedGreen else WastedRed,
+                        color    = entry.reason.badgeFg,
                     )
                 }
                 Column {
