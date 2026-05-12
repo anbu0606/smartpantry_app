@@ -14,6 +14,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
@@ -31,6 +32,10 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -46,6 +51,17 @@ private val SectionLabelGreen = Color(0xFF0F6E56)
 private val EditGreen         = Color(0xFF2E7D32)
 private val DaysGreen         = Color(0xFF2E7D32)
 private val DaysAmber         = Color(0xFFF57F17)
+
+// Reason options shown in the "Mark as Wasted" picker.
+// `code` mirrors WasteLogEntity.reason ("EXPIRED" / "SPOILED" / "OTHER") —
+// Anbu Day 4 will pass it to viewModel.markWasted(code) when wiring the dialog onClick.
+private data class ReasonOption(val code: String, val label: String, val description: String)
+
+private val ReasonOptions = listOf(
+    ReasonOption("EXPIRED", "Expired", "Past its expiry date"),
+    ReasonOption("SPOILED", "Spoiled", "Bad smell, mould, or visibly off"),
+    ReasonOption("OTHER",   "Other",   "Some other reason"),
+)
 
 //Hardcoded data for the prototype
 private const val ItemName           = "Full Cream Milk"
@@ -77,6 +93,10 @@ fun FoodDetailScreen(
         ItemDaysUntilExpiry <= 3                  -> DaysAmber
         else                                      -> DaysGreen
     }
+
+    // Controls visibility of the reason picker shown when the user taps "Mark as Wasted".
+    // Anbu Day 4 will replace the onClick stubs inside the dialog with viewModel.markWasted(code).
+    var showReasonPicker by remember { mutableStateOf(false) }
 
     Scaffold(
         topBar = {
@@ -251,7 +271,9 @@ fun FoodDetailScreen(
                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                 ) {
                     Button(
-                        // TODO: Assessment 3: record deletion type (consumed/wasted) in WasteLogRepository for Analytics tracking
+                        // TODO(Anbu Day 4): viewModel.markConsumed() then onNavigateBack().
+                        // Sets FoodItemEntity.consumed = true; does NOT write to WasteLog
+                        // (waste-only by design — see day2-room-di-checklist §1.5).
                         onClick  = {},
                         modifier = Modifier
                             .weight(1f)
@@ -270,8 +292,9 @@ fun FoodDetailScreen(
                     }
 
                     OutlinedButton(
-                        // TODO: Assessment 3: record deletion type (consumed/wasted) in WasteLogRepository for Analytics tracking
-                        onClick  = {},
+                        // Opens the reason picker dialog below. Anbu Day 4 will replace
+                        // each dialog option's onClick with viewModel.markWasted(opt.code).
+                        onClick  = { showReasonPicker = true },
                         modifier = Modifier
                             .weight(1f)
                             .height(52.dp),
@@ -291,6 +314,56 @@ fun FoodDetailScreen(
                 }
             }
         }
+    }
+
+    // Reason picker shown when the user taps "Mark as Wasted". Prototype-only:
+    // dialog onClick currently just closes the picker; Anbu Day 4 wires the VM call.
+    if (showReasonPicker) {
+        AlertDialog(
+            onDismissRequest = { showReasonPicker = false },
+            title = {
+                Text(
+                    text  = "Why are you discarding this?",
+                    style = MaterialTheme.typography.titleMedium,
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    ReasonOptions.forEach { opt ->
+                        TextButton(
+                            // TODO(Anbu Day 4): viewModel.markWasted(opt.code) ->
+                            //   wasteRepo.log(WasteLogEntity(reason = opt.code, ...))
+                            //   + foodRepo.markWasted(id); then showReasonPicker = false + onNavigateBack().
+                            onClick  = { showReasonPicker = false },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) {
+                            Column(
+                                modifier            = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.Start,
+                            ) {
+                                Text(
+                                    text  = opt.label,
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.SemiBold,
+                                    ),
+                                )
+                                Text(
+                                    text  = opt.description,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = { showReasonPicker = false }) {
+                    Text("Cancel")
+                }
+            },
+        )
     }
 }
 
