@@ -18,21 +18,21 @@ import javax.inject.Singleton
 @Singleton
 class WasteRepositoryImpl @Inject constructor (
     private val dao: WasteLogDao,
-) : WasteRepository{
+) : WasteRepository {
     override fun observeAll(): Flow<List<WasteLogEntity>> {
-        TODO("Not yet implemented")
+        return dao.observeAll()
     }
 
     override fun observeMonthlyTotals(): Flow<List<MonthlyTotal>> {
-        TODO("Not yet implemented")
+        return dao.observeMonthlyTotals()
     }
 
     override fun observeByCategory(): Flow<List<CategoryTotal>> {
-        TODO("Not yet implemented")
+        return dao.observeByCategory()
     }
 
     override suspend fun log(entry: WasteLogEntity) {
-        TODO("Not yet implemented")
+        dao.insert(entry)
     }
 
 }
