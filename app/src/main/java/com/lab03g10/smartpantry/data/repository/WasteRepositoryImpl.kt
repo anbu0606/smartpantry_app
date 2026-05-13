@@ -16,23 +16,20 @@ import javax.inject.Singleton
  * Steve Zheng PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
  */
 @Singleton
-class WasteRepositoryImpl @Inject constructor (
+class WasteRepositoryImpl @Inject constructor(
     private val dao: WasteLogDao,
 ) : WasteRepository {
-    override fun observeAll(): Flow<List<WasteLogEntity>> {
-        return dao.observeAll()
-    }
 
-    override fun observeMonthlyTotals(): Flow<List<MonthlyTotal>> {
-        return dao.observeMonthlyTotals()
-    }
+    override fun observeAll(): Flow<List<WasteLogEntity>> =
+        dao.observeAll()
 
-    override fun observeByCategory(): Flow<List<CategoryTotal>> {
-        return dao.observeByCategory()
-    }
+    override fun observeMonthlyTotals(): Flow<List<MonthlyTotal>> =
+        dao.observeMonthlyTotals()
 
-    override suspend fun log(entry: WasteLogEntity) {
+    override fun observeByCategory(): Flow<List<CategoryTotal>> =
+        dao.observeByCategory()
+
+    // Repo method named `log` for semantic clarity at call sites; delegates to DAO's `insert`
+    override suspend fun log(entry: WasteLogEntity) =
         dao.insert(entry)
-    }
-
 }
