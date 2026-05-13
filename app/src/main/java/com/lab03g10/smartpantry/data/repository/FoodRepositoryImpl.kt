@@ -25,7 +25,7 @@ class FoodRepositoryImpl @Inject constructor(
         TODO("Not yet implemented")
     }
 
-    override fun observeByCategory(today: Long): Flow<List<FoodItemEntity>> {
+    override fun observeByCategory(today: String): Flow<List<FoodItemEntity>> {
         TODO("Not yet implemented")
     }
 
