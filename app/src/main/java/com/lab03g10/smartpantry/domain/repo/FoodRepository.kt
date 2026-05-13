@@ -15,7 +15,7 @@ interface FoodRepository {
 
     fun observeUseToday(today: Long): Flow<List<FoodItemEntity>>
 
-    fun observeByCategory(today: String): Flow<List<FoodItemEntity>>
+    fun observeByCategory(category: String): Flow<List<FoodItemEntity>>
 
     fun observeById(id: String): Flow<FoodItemEntity?>
 

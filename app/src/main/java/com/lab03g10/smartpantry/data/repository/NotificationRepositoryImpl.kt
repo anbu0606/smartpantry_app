@@ -17,19 +17,16 @@ import javax.inject.Singleton
 class NotificationRepositoryImpl @Inject constructor(
     private val dao: NotificationDao,
 ) : NotificationRepository {
-    override fun observeAll(): Flow<List<NotificationEntity>> {
-        TODO("Not yet implemented")
-    }
 
-    override fun observeUnreadCount(): Flow<Int> {
-        TODO("Not yet implemented")
-    }
+    override fun observeAll(): Flow<List<NotificationEntity>> =
+        dao.observeAll()
 
-    override suspend fun markRead(id: String) {
-        TODO("Not yet implemented")
-    }
+    override fun observeUnreadCount(): Flow<Int> =
+        dao.observeUnreadCount()
 
-    override suspend fun insert(notif: NotificationEntity) {
-        TODO("Not yet implemented")
-    }
+    override suspend fun markRead(id: String) =
+        dao.markRead(id)
+
+    override suspend fun insert(notif: NotificationEntity) =
+        dao.insert(notif)
 }
