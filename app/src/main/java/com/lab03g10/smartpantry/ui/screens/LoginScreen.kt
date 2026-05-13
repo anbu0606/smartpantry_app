@@ -29,6 +29,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CheckboxDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,7 +59,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.LoginViewModel
 
 // Card-level colour constants
 private val LogoIconBg    = Color(0xFFE1F5EE)   // pale green box behind the leaf icon
@@ -67,7 +72,6 @@ private val GoogleBorder  = Color(0xFFCCCCCC)
 private val GoogleText    = Color(0xFF1A1A1A)
 
 // Google "G" icon used in the UI
-// Created directly in code (no image file needed)
 private val GoogleIcon: ImageVector by lazy {
     ImageVector.Builder(
         name           = "Google",
@@ -76,7 +80,6 @@ private val GoogleIcon: ImageVector by lazy {
         viewportWidth  = 24f,
         viewportHeight = 24f,
     ).apply {
-        // Blue
         addPath(
             pathData = PathParser().parsePathString(
                 "M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92" +
@@ -85,7 +88,6 @@ private val GoogleIcon: ImageVector by lazy {
             ).toNodes(),
             fill = SolidColor(Color(0xFF4285F4)),
         )
-        // Green
         addPath(
             pathData = PathParser().parsePathString(
                 "M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77" +
@@ -94,7 +96,6 @@ private val GoogleIcon: ImageVector by lazy {
             ).toNodes(),
             fill = SolidColor(Color(0xFF34A853)),
         )
-        // Yellow
         addPath(
             pathData = PathParser().parsePathString(
                 "M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09" +
@@ -102,7 +103,6 @@ private val GoogleIcon: ImageVector by lazy {
             ).toNodes(),
             fill = SolidColor(Color(0xFFFBBC05)),
         )
-        // Red
         addPath(
             pathData = PathParser().parsePathString(
                 "M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15" +
@@ -114,23 +114,8 @@ private val GoogleIcon: ImageVector by lazy {
     }.build()
 }
 
-// Public composable
-
 /**
  * Sign-in screen for the Smart Pantry app.
- *
- * Screen layout:
- * - App logo and title at the top
- * - Email input field
- * - Password input field with show/hide option
- * - "Forgot password?" option
- * - Sign In button
- * - Divider with "or"
- * - Google sign-in button
- * - "Create account" option at the bottom
- *
- * This screen is scrollable
- * Outer navigation handles padding and layout
  *
  * @param onLoginSuccess  -> goes to dashboard after login when tapped
  * @param onNavigateToRegister -> opens registration screen when tapped
@@ -141,11 +126,15 @@ fun LoginScreen(
     onLoginSuccess: () -> Unit,
     onNavigateToRegister: () -> Unit,
     onNavigateToForgotPassword: () -> Unit = {},
+    viewModel: LoginViewModel = hiltViewModel()
 ) {
     var email           by remember { mutableStateOf("") }
     var password        by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var rememberMe      by remember { mutableStateOf(false) }
+
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -183,7 +172,7 @@ fun LoginScreen(
             Text(
                 text  = "Smart Pantry",
                 style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Light,   // weight 300 per spec
+                    fontWeight = FontWeight.Light,
                 ),
                 color = MaterialTheme.colorScheme.onBackground,
             )
@@ -213,6 +202,8 @@ fun LoginScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
                 singleLine      = true,
                 shape           = RoundedCornerShape(12.dp),
+                enabled         = !isLoading,
+                isError         = error != null && error!!.contains("email", ignoreCase = true)
             )
 
             Spacer(Modifier.height(16.dp))
@@ -247,6 +238,8 @@ fun LoginScreen(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 singleLine      = true,
                 shape           = RoundedCornerShape(12.dp),
+                enabled         = !isLoading,
+                isError         = error != null && error!!.contains("password", ignoreCase = true)
             )
 
             // "Remember me" (left) + "Forgot password?" (right) in one row
@@ -262,6 +255,7 @@ fun LoginScreen(
                     Checkbox(
                         checked         = rememberMe,
                         onCheckedChange = { rememberMe = it },
+                        enabled         = !isLoading,
                         colors          = CheckboxDefaults.colors(
                             checkedColor   = MaterialTheme.colorScheme.primary,
                             uncheckedColor = MaterialTheme.colorScheme.outline,
@@ -276,6 +270,7 @@ fun LoginScreen(
 
                 TextButton(
                     onClick        = onNavigateToForgotPassword,
+                    enabled        = !isLoading,
                     contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
                 ) {
                     Text(
@@ -290,9 +285,18 @@ fun LoginScreen(
 
             Spacer(Modifier.height(16.dp))
 
+            if (error != null) {
+                Text(
+                    text = error!!,
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall,
+                    modifier = Modifier.padding(bottom = 16.dp)
+                )
+            }
+
             // 4. Sign In button
             Button(
-                onClick  = onLoginSuccess,
+                onClick  = { viewModel.signIn(email, password, onLoginSuccess) },
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -300,13 +304,22 @@ fun LoginScreen(
                 colors = ButtonDefaults.buttonColors(
                     containerColor = MaterialTheme.colorScheme.primary,
                 ),
+                enabled = !isLoading
             ) {
-                Text(
-                    text  = "Sign In",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.SemiBold,
-                    ),
-                )
+                if (isLoading) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp),
+                        color = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp
+                    )
+                } else {
+                    Text(
+                        text  = "Sign In",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.SemiBold,
+                        ),
+                    )
+                }
             }
 
             Spacer(Modifier.height(24.dp))
@@ -351,11 +364,12 @@ fun LoginScreen(
                     contentColor   = GoogleText,
                 ),
                 contentPadding = PaddingValues(horizontal = 24.dp),
+                enabled        = !isLoading
             ) {
                 Icon(
                     imageVector        = GoogleIcon,
                     contentDescription = "Google",
-                    tint               = Color.Unspecified,    // preserve the 4-colour logo
+                    tint               = Color.Unspecified,
                     modifier           = Modifier.size(20.dp),
                 )
                 Spacer(Modifier.width(12.dp))
@@ -382,6 +396,7 @@ fun LoginScreen(
                 )
                 TextButton(
                     onClick        = onNavigateToRegister,
+                    enabled        = !isLoading,
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
                 ) {
                     Text(
@@ -396,36 +411,5 @@ fun LoginScreen(
 
             Spacer(Modifier.height(32.dp))
         }
-    }
-}
-
-// Previews
-
-@Preview(name = "Light", showBackground = true, backgroundColor = 0xFFF9F9F9)
-@Composable
-private fun PreviewLoginLight() {
-    SmartPantryTheme {
-        LoginScreen(
-            onLoginSuccess             = {},
-            onNavigateToRegister       = {},
-            onNavigateToForgotPassword = {},
-        )
-    }
-}
-
-@Preview(
-    name            = "Dark",
-    showBackground  = true,
-    backgroundColor = 0xFF191C18,
-    uiMode          = UI_MODE_NIGHT_YES,
-)
-@Composable
-private fun PreviewLoginDark() {
-    SmartPantryTheme(darkTheme = true) {
-        LoginScreen(
-            onLoginSuccess             = {},
-            onNavigateToRegister       = {},
-            onNavigateToForgotPassword = {},
-        )
     }
 }

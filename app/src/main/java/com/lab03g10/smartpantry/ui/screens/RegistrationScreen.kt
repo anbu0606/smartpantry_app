@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.imePadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,7 +56,9 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.RegistrationViewModel
 
 // Design-system colour constants
 private val WarningAmber  = Color(0xFFF57F17)   // strength "Medium" — amber per HTML spec
@@ -87,14 +92,6 @@ private fun passwordStrength(password: String): PasswordStrength = when {
 /**
  * Registration screen for the Smart Pantry app.
  *
- * Screen layout:
- * - Top bar with back button and title
- * - Subtitle text
- * - Form with name, email, password, and confirm password
- * - Password strength indicator
- * - Create Account button (enabled when all fields are valid)
- * - "Already have an account?" option at the bottom
- *
  * @param onRegistrationSuccess -> Called when registration is completed
  * @param onNavigateToLogin -> used to go back to login screen
  */
@@ -103,6 +100,7 @@ private fun passwordStrength(password: String): PasswordStrength = when {
 fun RegistrationScreen(
     onRegistrationSuccess: () -> Unit,
     onNavigateToLogin: () -> Unit,
+    viewModel: RegistrationViewModel = hiltViewModel()
 ) {
     // Field state
     var fullName               by remember { mutableStateOf("") }
@@ -113,6 +111,9 @@ fun RegistrationScreen(
     var confirmPasswordVisible by remember { mutableStateOf(false) }
     // Tracks whether the confirm field has ever lost focus (used to defer error display)
     var confirmTouched         by remember { mutableStateOf(false) }
+
+    val isLoading by viewModel.isLoading.collectAsState()
+    val error by viewModel.error.collectAsState()
 
     // Derived UI state
     val strength           = passwordStrength(password)
@@ -134,7 +135,7 @@ fun RegistrationScreen(
                     )
                 },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateToLogin) {
+                    IconButton(onClick = onNavigateToLogin, enabled = !isLoading) {
                         Icon(
                             imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Back",
@@ -196,6 +197,7 @@ fun RegistrationScreen(
                     singleLine      = true,
                     shape           = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
+                    enabled         = !isLoading
                 )
 
                 // Email
@@ -213,6 +215,8 @@ fun RegistrationScreen(
                     singleLine      = true,
                     shape           = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                    enabled         = !isLoading,
+                    isError         = error?.contains("email", ignoreCase = true) == true
                 )
 
                 // Password + strength indicator
@@ -249,6 +253,8 @@ fun RegistrationScreen(
                         singleLine      = true,
                         shape           = RoundedCornerShape(12.dp),
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        enabled         = !isLoading,
+                        isError         = error?.contains("password", ignoreCase = true) == true
                     )
 
                     // Strength indicator — appears after the first character is typed
@@ -309,15 +315,25 @@ fun RegistrationScreen(
                     singleLine      = true,
                     shape           = RoundedCornerShape(12.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                    enabled         = !isLoading
                 )
+
+                if (error != null) {
+                    Text(
+                        text = error!!,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
 
                 // Submit
                 Button(
-                    onClick  = onRegistrationSuccess,
+                    onClick  = { viewModel.signUp(email, fullName, password, onRegistrationSuccess) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .height(52.dp),
-                    enabled = isFormValid,
+                    enabled = isFormValid && !isLoading,
                     shape   = RoundedCornerShape(12.dp),
                     colors  = ButtonDefaults.buttonColors(
                         containerColor         = MaterialTheme.colorScheme.primary,
@@ -328,12 +344,20 @@ fun RegistrationScreen(
                             .copy(alpha = 0.38f),
                     ),
                 ) {
-                    Text(
-                        text  = "Create Account",
-                        style = MaterialTheme.typography.labelLarge.copy(
-                            fontWeight = FontWeight.SemiBold,
-                        ),
-                    )
+                    if (isLoading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(24.dp),
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            strokeWidth = 2.dp
+                        )
+                    } else {
+                        Text(
+                            text  = "Create Account",
+                            style = MaterialTheme.typography.labelLarge.copy(
+                                fontWeight = FontWeight.SemiBold,
+                            ),
+                        )
+                    }
                 }
             }
 
@@ -353,6 +377,7 @@ fun RegistrationScreen(
                 TextButton(
                     onClick        = onNavigateToLogin,
                     contentPadding = PaddingValues(horizontal = 6.dp, vertical = 4.dp),
+                    enabled        = !isLoading
                 ) {
                     Text(
                         text  = "Sign in",
