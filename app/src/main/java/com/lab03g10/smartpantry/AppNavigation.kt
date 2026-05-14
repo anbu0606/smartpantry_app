@@ -185,7 +185,13 @@ fun AppNavigation() {
                 )
             }
             composable(Route.PROFILE) {
-                ProfileScreen()
+                ProfileScreen(
+                    onSignOut = {
+                        navController.navigate(Route.LOGIN) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
             }
             composable(
                 route = Route.ADD_EDIT_FOOD,

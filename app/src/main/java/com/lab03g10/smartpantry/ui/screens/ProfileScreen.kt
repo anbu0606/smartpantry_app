@@ -40,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateMapOf
@@ -55,7 +56,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.ProfileViewModel
 
 // Design tokens
 private val AvatarGreen       = Color(0xFF1D9E75)
@@ -92,22 +95,23 @@ private val reminderOptions = listOf("24 hours before", "48 hours before", "72 h
 /**
  * Profile & Settings screen.
  *
- * Sections in this screen:
- * 1. User details (profile image, name, email)
- * 2. Dietary preferences (toggle options)
- * 3. Expiry reminder options
- * 4. Fridge temperature setting
- * 5.  Save button and Sign Out option
+ * @param onSignOut flow when tapped
+ * @param viewModel ProfileViewModel
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen() {
+fun ProfileScreen(
+    onSignOut: () -> Unit,
+    viewModel: ProfileViewModel = hiltViewModel()
+) {
     // State
     val switchStates = remember {
         mutableStateMapOf(*defaultSwitchStates.entries.map { it.key to it.value }.toTypedArray())
     }
     var selectedReminder by remember { mutableStateOf("48 hours before") }
     var alertThreshold   by remember { mutableFloatStateOf(6f) }
+
+    val currentUser by viewModel.currentUser.collectAsState()
 
     Scaffold(
         topBar = {
@@ -144,7 +148,10 @@ fun ProfileScreen() {
 
             // 1. User header
             item {
-                UserHeader()
+                UserHeader(
+                    name = currentUser?.displayName ?: "Guest User",
+                    email = currentUser?.email ?: "Not logged in"
+                )
             }
 
             // 2. Dietary Preferences
@@ -339,7 +346,10 @@ fun ProfileScreen() {
                     Spacer(Modifier.height(8.dp))
 
                     TextButton(
-                        onClick  = { /* TODO: sign out flow */ },
+                        onClick  = { 
+                            viewModel.signOut()
+                            onSignOut()
+                        },
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Text(
@@ -360,7 +370,7 @@ fun ProfileScreen() {
 // User header
 
 @Composable
-private fun UserHeader() {
+private fun UserHeader(name: String, email: String) {
     Column(
         modifier            = Modifier
             .fillMaxWidth()
@@ -377,7 +387,7 @@ private fun UserHeader() {
             contentAlignment = Alignment.Center,
         ) {
             Text(
-                text  = "A",
+                text  = if (name.isNotEmpty()) name.take(1).uppercase() else "G",
                 style = MaterialTheme.typography.titleLarge.copy(
                     fontWeight = FontWeight.Light,
                     fontSize   = 32.sp,
@@ -389,7 +399,7 @@ private fun UserHeader() {
         Spacer(Modifier.height(8.dp))
 
         Text(
-            text  = "Alex Song",
+            text  = name,
             style = MaterialTheme.typography.titleLarge.copy(
                 fontWeight = FontWeight.Normal,
             ),
@@ -399,7 +409,7 @@ private fun UserHeader() {
         Spacer(Modifier.height(4.dp))
 
         Text(
-            text  = "alex@example.com",
+            text  = email,
             style = MaterialTheme.typography.bodySmall,
             color = SubtitleGrey,
         )
@@ -513,7 +523,7 @@ private fun DietaryPrefRow(
 @Composable
 private fun PreviewProfileLight() {
     SmartPantryTheme {
-        ProfileScreen()
+        ProfileScreen(onSignOut = {})
     }
 }
 
@@ -526,6 +536,6 @@ private fun PreviewProfileLight() {
 @Composable
 private fun PreviewProfileDark() {
     SmartPantryTheme(darkTheme = true) {
-        ProfileScreen()
+        ProfileScreen(onSignOut = {})
     }
 }
