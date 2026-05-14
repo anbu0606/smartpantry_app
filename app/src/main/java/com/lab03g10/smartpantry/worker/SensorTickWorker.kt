@@ -3,6 +3,9 @@ package com.lab03g10.smartpantry.worker
 import android.content.Context
 import androidx.hilt.work.HiltWorker
 import androidx.work.CoroutineWorker
+import androidx.work.ExistingWorkPolicy
+import androidx.work.OneTimeWorkRequestBuilder
+import androidx.work.WorkManager
 import androidx.work.WorkerParameters
 import com.lab03g10.smartpantry.data.local.entity.NotificationEntity
 import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
@@ -53,9 +56,28 @@ class SensorTickWorker @AssistedInject constructor(
                 )
             }
         }
+        // Chain: trigger shelf-life recalculation with fresh readings.
+        // Periodic workers can't use WorkContinuation.then(), so we enqueue a
+        // one-shot ShelfLifeRecalcWorker with REPLACE policy — at most one
+        // pending recalc, no stacking if ticks come faster than recalc finishes.
+        enqueueRecalcWorker()
         Result.success()
     } catch (_: Throwable) {
         Result.retry()
+    }
+
+    private fun enqueueRecalcWorker() {
+        val request = OneTimeWorkRequestBuilder<ShelfLifeRecalcWorker>().build()
+        WorkManager.getInstance(applicationContext)
+            .enqueueUniqueWork(
+                RECALC_WORK_NAME,
+                ExistingWorkPolicy.REPLACE,
+                request,
+            )
+    }
+
+    companion object {
+        internal const val RECALC_WORK_NAME = "smartpantry.shelf-life-recalc"
     }
 }
 
