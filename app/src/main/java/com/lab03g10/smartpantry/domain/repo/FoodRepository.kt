@@ -29,4 +29,10 @@ interface FoodRepository {
 
     suspend fun markWasted(id: String)
 
+    /** All active (non-consumed, non-wasted) food items stored at a given sensor location. */
+    suspend fun findActiveByStorageLocation(sensorId: String): List<FoodItemEntity>
+
+    /** Targeted update: only effectiveExpiryDate + updatedAt. */
+    suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long)
+
 }

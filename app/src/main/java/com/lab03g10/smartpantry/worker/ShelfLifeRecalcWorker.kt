@@ -1,0 +1,85 @@
+package com.lab03g10.smartpantry.worker
+
+import android.content.Context
+import androidx.hilt.work.HiltWorker
+import androidx.work.CoroutineWorker
+import androidx.work.WorkerParameters
+import com.lab03g10.smartpantry.data.sensor.ThresholdEngine
+import com.lab03g10.smartpantry.domain.repo.FoodRepository
+import com.lab03g10.smartpantry.domain.repo.SensorRepository
+import com.lab03g10.smartpantry.domain.usecase.ShelfLifeCalculator
+import dagger.assisted.Assisted
+import dagger.assisted.AssistedInject
+import kotlinx.coroutines.flow.first
+
+/**
+ * @(#) ShelfLifeRecalcWorker.kt 1.0 2026-05-15
+ * Copyright (c) 2026, Steve Zheng. ALL right reserved.
+ * Steve Zheng PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
+ */
+@HiltWorker
+class ShelfLifeRecalcWorker @AssistedInject constructor(
+    @Assisted appContext: Context,
+    @Assisted params: WorkerParameters,
+    private val sensorRepo: SensorRepository,
+    private val foodRepo: FoodRepository,
+    private val engine: ThresholdEngine,
+    private val calculator: ShelfLifeCalculator,
+) : CoroutineWorker(appContext, params) {
+
+    override suspend fun doWork(): Result = try {
+        recalculateAll()
+        Result.success()
+    } catch (_: Throwable) {
+        Result.retry()
+    }
+
+    // Extracted for testability — can be called from tests with mocked repos
+    internal suspend fun recalculateAll() {
+        val configs = sensorRepo.observeConfigs().first().filter { it.active }
+        val now = System.currentTimeMillis()
+
+        for (config in configs) {
+            val foods = foodRepo.findActiveByStorageLocation(config.id)
+            if (foods.isEmpty()) continue
+
+            // Lookback: from the earliest purchaseDate among these foods, or 7 days ago,
+            // whichever is more recent (caps query size for long-running sensors).
+            val earliestPurchase = foods.minOf { it.purchaseDate }
+            val lookbackFloor = now - LOOKBACK_WINDOW_MS
+            val since = maxOf(earliestPurchase, lookbackFloor)
+
+            val readings = sensorRepo.getReadingsForSensorSince(config.id, since)
+            if (readings.isEmpty()) continue
+
+            val stress = engine.analyse(config, readings)
+
+            for (food in foods) {
+                // Filter readings to only those after this food's purchase date
+                val foodReadings = if (food.purchaseDate > since) {
+                    readings.filter { it.timestamp >= food.purchaseDate }
+                } else {
+                    readings
+                }
+                if (foodReadings.isEmpty()) continue
+
+                val foodStress = if (foodReadings.size == readings.size) {
+                    stress  // reuse if same window
+                } else {
+                    engine.analyse(config, foodReadings)  // re-analyse for this food's window
+                }
+
+                val newExpiry = calculator.recalculate(food, foodStress, now)
+
+                // Only write if changed (avoid unnecessary DB writes + UI recomposition triggers)
+                if (newExpiry != food.effectiveExpiryDate) {
+                    foodRepo.updateEffectiveExpiry(food.id, newExpiry)
+                }
+            }
+        }
+    }
+
+    companion object {
+        /** Maximum lookback window: 7 days of readings. */
+        private const val LOOKBACK_WINDOW_MS = 7L * 24 * 60 * 60 * 1000
+    }}

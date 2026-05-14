@@ -44,4 +44,10 @@ class FoodRepositoryImpl @Inject constructor(
 
     override suspend fun markWasted(id: String) =
         dao.markWasted(id, at = System.currentTimeMillis())
+
+    override suspend fun findActiveByStorageLocation(sensorId: String) =
+        dao.findActiveByStorageLocation(sensorId)
+
+    override suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long) =
+        dao.updateEffectiveExpiry(id, effectiveExpiryDate, System.currentTimeMillis())
 }
