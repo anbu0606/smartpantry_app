@@ -59,11 +59,21 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
+    val userName: StateFlow<String> = preferenceRepository.observeUserName().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        ""
+    )
+
     fun setQuietHours(start: Int, end: Int) {
         viewModelScope.launch {
             preferenceRepository.setQuietHoursStart(start)
             preferenceRepository.setQuietHoursEnd(end)
         }
+    }
+
+    fun setUserName(name: String) {
+        viewModelScope.launch { preferenceRepository.setUserName(name) }
     }
 
     fun signOut() {

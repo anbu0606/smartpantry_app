@@ -2,7 +2,6 @@ package com.lab03g10.smartpantry.ui.screens
 
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -28,10 +27,10 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.RadioButton
-import androidx.compose.material3.RadioButtonDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
+import androidx.compose.material3.SliderColors
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
@@ -40,9 +39,11 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,6 +55,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -79,7 +81,6 @@ private val dietaryPrefs = listOf(
     DietPref("dairy",  "🥛", "Dairy-Free",   "Exclude dairy products"),
 )
 
-// Gluten-Free is ON by default
 private val defaultSwitchStates = mapOf(
     "veg"    to false,
     "vegan"  to false,
@@ -87,31 +88,38 @@ private val defaultSwitchStates = mapOf(
     "dairy"  to false,
 )
 
-// Expiry reminder options
-private val reminderOptions = listOf("24 hours before", "48 hours before", "72 hours before")
-
-// Public composable
-
-/**
- * Profile & Settings screen.
- *
- * @param onSignOut flow when tapped
- * @param viewModel ProfileViewModel
- */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ProfileScreen(
     onSignOut: () -> Unit,
     viewModel: ProfileViewModel = hiltViewModel()
 ) {
-    // State
+    // Observe DataStore-backed state
+    val isDarkMode      by viewModel.isDarkMode.collectAsState()
+    val notifyDaysVm    by viewModel.notifyDaysBefore.collectAsState()
+    val quietStartVm    by viewModel.quietHoursStart.collectAsState()
+    val quietEndVm      by viewModel.quietHoursEnd.collectAsState()
+    val userNameVm      by viewModel.userName.collectAsState()
+    val currentUser     by viewModel.currentUser.collectAsState()
+
+    // Prefer DataStore name; fall back to Firebase displayName
+    val resolvedName = userNameVm.ifEmpty { currentUser?.displayName.orEmpty() }
+
+    // Local editable state — name initialises once when a non-empty value arrives
+    var localName       by remember { mutableStateOf("") }
+    LaunchedEffect(resolvedName) {
+        if (localName.isEmpty() && resolvedName.isNotEmpty()) localName = resolvedName
+    }
+    // Slider states reset to the persisted value whenever DataStore emits (i.e. after Save)
+    var localNotifyDays by remember(notifyDaysVm) { mutableIntStateOf(notifyDaysVm) }
+    var localQuietStart by remember(quietStartVm)  { mutableIntStateOf(quietStartVm) }
+    var localQuietEnd   by remember(quietEndVm)    { mutableIntStateOf(quietEndVm) }
+
+    // Local-only state (not persisted via DataStore)
     val switchStates = remember {
         mutableStateMapOf(*defaultSwitchStates.entries.map { it.key to it.value }.toTypedArray())
     }
-    var selectedReminder by remember { mutableStateOf("48 hours before") }
-    var alertThreshold   by remember { mutableFloatStateOf(6f) }
-
-    val currentUser by viewModel.currentUser.collectAsState()
+    var alertThreshold by remember { mutableFloatStateOf(6f) }
 
     Scaffold(
         topBar = {
@@ -119,54 +127,103 @@ fun ProfileScreen(
                 title = {
                     Text(
                         text  = "Profile & Settings",
-                        style = MaterialTheme.typography.titleLarge.copy(
-                            fontWeight = FontWeight.Normal,
-                        ),
+                        style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal),
                     )
                 },
                 actions = {
                     IconButton(onClick = { /* TODO: edit profile */ }) {
-                        Icon(
-                            imageVector        = Icons.Outlined.Edit,
-                            contentDescription = "Edit profile",
-                        )
+                        Icon(imageVector = Icons.Outlined.Edit, contentDescription = "Edit profile")
                     }
                 },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.background,
-                ),
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         LazyColumn(
-            modifier       = Modifier
-                .fillMaxSize()
-                .padding(innerPadding),
+            modifier       = Modifier.fillMaxSize().padding(innerPadding),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
 
             // 1. User header
             item {
                 UserHeader(
-                    name = currentUser?.displayName ?: "Guest User",
-                    email = currentUser?.email ?: "Not logged in"
+                    name  = localName.ifEmpty { currentUser?.displayName ?: "Guest User" },
+                    email = currentUser?.email ?: "Not logged in",
                 )
             }
 
-            // 2. Dietary Preferences
-            // Note: These switches currently work only in this screen
-            // They are not connected to other parts of the app yet
-            //
-            // Future Improvements(Assignment 3):
-            // - Preferences can be shared across screens
-            // - Food items can be checked based on these preferences
-            // - App can show warnings or filter items if needed
+            // 2. Account — editable display name (persisted on Save)
             item {
-                SectionLabel(
-                    title    = "DIETARY PREFERENCES",
-                    topPad   = 20.dp,
-                )
+                SectionLabel(title = "ACCOUNT", topPad = 20.dp)
+                ElevatedCard(
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape     = RoundedCornerShape(16.dp),
+                    colors    = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                ) {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                        OutlinedTextField(
+                            value         = localName,
+                            onValueChange = { localName = it },
+                            label         = { Text("Display name") },
+                            singleLine    = true,
+                            modifier      = Modifier.fillMaxWidth(),
+                        )
+                    }
+                }
+            }
+
+            // 3. Appearance — dark mode (persists immediately on toggle)
+            item {
+                SectionLabel(title = "APPEARANCE")
+                ElevatedCard(
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape     = RoundedCornerShape(16.dp),
+                    colors    = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                ) {
+                    Row(
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column {
+                            Text(
+                                text  = "Dark Mode",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text  = "Override system theme",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SubtitleGrey,
+                            )
+                        }
+                        Switch(
+                            checked         = isDarkMode,
+                            onCheckedChange = { viewModel.setDarkMode(it) },
+                            colors          = SwitchDefaults.colors(
+                                checkedThumbColor    = Color.White,
+                                checkedTrackColor    = SliderActiveGreen,
+                                uncheckedThumbColor  = Color.White,
+                                uncheckedTrackColor  = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+                            ),
+                        )
+                    }
+                }
+            }
+
+            // 4. Dietary Preferences (local only)
+            item {
+                SectionLabel(title = "DIETARY PREFERENCES")
                 Column(
                     modifier            = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
@@ -181,13 +238,11 @@ fun ProfileScreen(
                 }
             }
 
-            // 3. Expiry Reminders
+            // 5. Expiry Notifications — notify-days-before slider 1–7 (persisted on Save)
             item {
-                SectionLabel(title = "EXPIRY REMINDERS")
+                SectionLabel(title = "EXPIRY NOTIFICATIONS")
                 ElevatedCard(
-                    modifier  = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     shape     = RoundedCornerShape(16.dp),
                     colors    = CardDefaults.elevatedCardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -195,62 +250,56 @@ fun ProfileScreen(
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Text(
-                            text  = "Notify me before expiry",
-                            style = MaterialTheme.typography.bodyLarge.copy(
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface,
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment     = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text  = "Notify me before expiry:",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text  = if (localNotifyDays == 1) "1 day" else "$localNotifyDays days",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Light),
+                                color = SliderActiveGreen,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // 7 discrete positions (1–7) → steps = 5
+                        Slider(
+                            value         = localNotifyDays.toFloat(),
+                            onValueChange = { localNotifyDays = it.toInt() },
+                            valueRange    = 1f..7f,
+                            steps         = 5,
+                            modifier      = Modifier.fillMaxWidth(),
+                            colors        = presetSliderColors(),
                         )
-                        Spacer(Modifier.height(12.dp))
-                        reminderOptions.forEachIndexed { index, option ->
-                            if (index > 0) {
-                                HorizontalDivider(
-                                    thickness = 0.5.dp,
-                                    color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.30f),
-                                )
-                            }
-                            Row(
-                                modifier            = Modifier
-                                    .fillMaxWidth()
-                                    .height(44.dp)
-                                    .clickable { selectedReminder = option },
-                                verticalAlignment   = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                            ) {
-                                val isSelected = option == selectedReminder
-                                Text(
-                                    text  = option,
-                                    style = MaterialTheme.typography.bodyMedium.copy(
-                                        fontWeight = if (isSelected) FontWeight.Medium else FontWeight.Normal,
-                                    ),
-                                    color = if (isSelected) {
-                                        MaterialTheme.colorScheme.primary
-                                    } else {
-                                        MaterialTheme.colorScheme.onSurfaceVariant
-                                    },
-                                )
-                                RadioButton(
-                                    selected = isSelected,
-                                    onClick  = { selectedReminder = option },
-                                    colors   = RadioButtonDefaults.colors(
-                                        selectedColor   = MaterialTheme.colorScheme.primary,
-                                        unselectedColor = MaterialTheme.colorScheme.outlineVariant,
-                                    ),
-                                )
-                            }
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text  = "1 day",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = SubtitleGrey,
+                            )
+                            Text(
+                                text  = "7 days",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = SubtitleGrey,
+                            )
                         }
                     }
                 }
             }
 
-            // 4. Fridge alert threshold slider
+            // 6. Quiet Hours — do-not-disturb window (persisted on Save)
             item {
-                SectionLabel(title = "FRIDGE ALERT THRESHOLD")
+                SectionLabel(title = "QUIET HOURS")
                 ElevatedCard(
-                    modifier  = Modifier
-                        .fillMaxWidth()
-                        .padding(horizontal = 16.dp),
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     shape     = RoundedCornerShape(16.dp),
                     colors    = CardDefaults.elevatedCardColors(
                         containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
@@ -258,7 +307,39 @@ fun ProfileScreen(
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        // Label + current value
+                        Text(
+                            text  = "Do Not Disturb",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        HourSliderRow(
+                            label    = "From",
+                            hour     = localQuietStart,
+                            onChange = { localQuietStart = it },
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        HourSliderRow(
+                            label    = "Until",
+                            hour     = localQuietEnd,
+                            onChange = { localQuietEnd = it },
+                        )
+                    }
+                }
+            }
+
+            // 7. Fridge alert threshold (local only — not persisted)
+            item {
+                SectionLabel(title = "FRIDGE ALERT THRESHOLD")
+                ElevatedCard(
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape     = RoundedCornerShape(16.dp),
+                    colors    = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
                         Row(
                             modifier              = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -266,39 +347,25 @@ fun ProfileScreen(
                         ) {
                             Text(
                                 text  = "Temperature alert above:",
-                                style = MaterialTheme.typography.bodyLarge.copy(
-                                    fontWeight = FontWeight.Medium,
-                                ),
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                                 color = MaterialTheme.colorScheme.onSurface,
                             )
                             Text(
                                 text  = "${alertThreshold.toInt()}°C",
-                                style = MaterialTheme.typography.titleLarge.copy(
-                                    fontWeight = FontWeight.Light,
-                                ),
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Light),
                                 color = SliderActiveGreen,
                             )
                         }
-
                         Spacer(Modifier.height(8.dp))
-
-                        // Slider
+                        // 9 discrete positions (2–10) → steps = 7
                         Slider(
                             value         = alertThreshold,
                             onValueChange = { alertThreshold = it },
                             valueRange    = 2f..10f,
-                            steps         = 7,    // 2,3,4,5,6,7,8,9,10 → 7 interior steps
+                            steps         = 7,
                             modifier      = Modifier.fillMaxWidth(),
-                            colors        = SliderDefaults.colors(
-                                thumbColor            = SliderActiveGreen,
-                                activeTrackColor      = SliderActiveGreen,
-                                inactiveTrackColor    = SliderTrackFill,
-                                activeTickColor       = Color.Transparent,
-                                inactiveTickColor     = Color.Transparent,
-                            ),
+                            colors        = presetSliderColors(),
                         )
-
-                        // Min / Max labels
                         Row(
                             modifier              = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
@@ -318,18 +385,20 @@ fun ProfileScreen(
                 }
             }
 
-            //  5. Action buttons
+            // 8. Action buttons
             item {
                 Spacer(Modifier.height(20.dp))
                 Column(
-                    modifier = Modifier.padding(horizontal = 16.dp),
+                    modifier            = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Button(
-                        onClick  = { /* TODO: persist preferences */ },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(52.dp),
+                        onClick  = {
+                            viewModel.setUserName(localName)
+                            viewModel.setNotifyDaysBefore(localNotifyDays)
+                            viewModel.setQuietHours(localQuietStart, localQuietEnd)
+                        },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         shape    = RoundedCornerShape(12.dp),
                         colors   = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
@@ -337,16 +406,14 @@ fun ProfileScreen(
                     ) {
                         Text(
                             text  = "Save Preferences",
-                            style = MaterialTheme.typography.labelLarge.copy(
-                                fontWeight = FontWeight.SemiBold,
-                            ),
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                         )
                     }
 
                     Spacer(Modifier.height(8.dp))
 
                     TextButton(
-                        onClick  = { 
+                        onClick  = {
                             viewModel.signOut()
                             onSignOut()
                         },
@@ -354,9 +421,7 @@ fun ProfileScreen(
                     ) {
                         Text(
                             text      = "Sign Out",
-                            style     = MaterialTheme.typography.bodyMedium.copy(
-                                fontWeight = FontWeight.Medium,
-                            ),
+                            style     = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
                             color     = SignOutRed,
                             textAlign = TextAlign.Center,
                         )
@@ -366,6 +431,48 @@ fun ProfileScreen(
         }
     }
 }
+
+// Hour slider row used by the Quiet Hours section
+
+@Composable
+private fun HourSliderRow(label: String, hour: Int, onChange: (Int) -> Unit) {
+    Row(
+        modifier              = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment     = Alignment.CenterVertically,
+    ) {
+        Text(
+            text  = label,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Text(
+            text  = "%02d:00".format(hour),
+            style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Light),
+            color = SliderActiveGreen,
+        )
+    }
+    // 24 discrete positions (0–23) → steps = 22
+    Slider(
+        value         = hour.toFloat(),
+        onValueChange = { onChange(it.toInt()) },
+        valueRange    = 0f..23f,
+        steps         = 22,
+        modifier      = Modifier.fillMaxWidth(),
+        colors        = presetSliderColors(),
+    )
+}
+
+// Shared slider colour preset to avoid repeating the same 5 colour args
+
+@Composable
+private fun presetSliderColors(): SliderColors = SliderDefaults.colors(
+    thumbColor         = SliderActiveGreen,
+    activeTrackColor   = SliderActiveGreen,
+    inactiveTrackColor = SliderTrackFill,
+    activeTickColor    = Color.Transparent,
+    inactiveTickColor  = Color.Transparent,
+)
 
 // User header
 
@@ -378,44 +485,25 @@ private fun UserHeader(name: String, email: String) {
             .padding(vertical = 24.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        // 80dp avatar circle
         Box(
-            modifier         = Modifier
-                .size(80.dp)
-                .clip(CircleShape)
-                .background(AvatarGreen),
+            modifier         = Modifier.size(80.dp).clip(CircleShape).background(AvatarGreen),
             contentAlignment = Alignment.Center,
         ) {
             Text(
                 text  = if (name.isNotEmpty()) name.take(1).uppercase() else "G",
-                style = MaterialTheme.typography.titleLarge.copy(
-                    fontWeight = FontWeight.Light,
-                    fontSize   = 32.sp,
-                ),
+                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Light, fontSize = 32.sp),
                 color = Color.White,
             )
         }
-
         Spacer(Modifier.height(8.dp))
-
         Text(
             text  = name,
-            style = MaterialTheme.typography.titleLarge.copy(
-                fontWeight = FontWeight.Normal,
-            ),
+            style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal),
             color = MaterialTheme.colorScheme.onSurface,
         )
-
         Spacer(Modifier.height(4.dp))
-
-        Text(
-            text  = email,
-            style = MaterialTheme.typography.bodySmall,
-            color = SubtitleGrey,
-        )
-
+        Text(text = email, style = MaterialTheme.typography.bodySmall, color = SubtitleGrey)
         Spacer(Modifier.height(24.dp))
-
         HorizontalDivider(
             thickness = 0.5.dp,
             color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f),
@@ -426,10 +514,7 @@ private fun UserHeader(name: String, email: String) {
 // Section label
 
 @Composable
-private fun SectionLabel(
-    title: String,
-    topPad: androidx.compose.ui.unit.Dp = 20.dp,
-) {
+private fun SectionLabel(title: String, topPad: Dp = 20.dp) {
     Text(
         text     = title,
         style    = MaterialTheme.typography.labelSmall.copy(
@@ -437,26 +522,14 @@ private fun SectionLabel(
             letterSpacing = 1.5.sp,
         ),
         color    = SectionLabelGreen,
-        modifier = Modifier.padding(
-            start  = 16.dp,
-            end    = 16.dp,
-            top    = topPad,
-            bottom = 8.dp,
-        ),
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = topPad, bottom = 8.dp),
     )
 }
 
 // Dietary preference row
 
-/**
- * Single dietary preference row with icon, text, and switch
- */
 @Composable
-private fun DietaryPrefRow(
-    pref: DietPref,
-    checked: Boolean,
-    onToggle: (Boolean) -> Unit,
-) {
+private fun DietaryPrefRow(pref: DietPref, checked: Boolean, onToggle: (Boolean) -> Unit) {
     ElevatedCard(
         shape     = RoundedCornerShape(12.dp),
         colors    = CardDefaults.elevatedCardColors(
@@ -465,43 +538,27 @@ private fun DietaryPrefRow(
         elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
     ) {
         Row(
-            modifier              = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
+            modifier              = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
             verticalAlignment     = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(14.dp),
         ) {
-            // 40dp icon tile
             Box(
-                modifier         = Modifier
-                    .size(40.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(IconTileBg),
+                modifier         = Modifier.size(40.dp).clip(RoundedCornerShape(12.dp)).background(IconTileBg),
                 contentAlignment = Alignment.Center,
             ) {
                 Text(text = pref.emoji, fontSize = 20.sp)
             }
-
-            // Text
             Column(
                 modifier            = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
                 Text(
                     text  = pref.title,
-                    style = MaterialTheme.typography.bodyLarge.copy(
-                        fontWeight = FontWeight.Medium,
-                    ),
+                    style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                Text(
-                    text  = pref.subtitle,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = SubtitleGrey,
-                )
+                Text(text = pref.subtitle, style = MaterialTheme.typography.bodySmall, color = SubtitleGrey)
             }
-
-            // Switch
             Switch(
                 checked         = checked,
                 onCheckedChange = onToggle,
