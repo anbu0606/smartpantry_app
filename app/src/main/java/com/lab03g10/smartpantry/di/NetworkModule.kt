@@ -5,19 +5,74 @@ import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import com.lab03g10.smartpantry.BuildConfig
+import com.lab03g10.smartpantry.data.remote.OpenFoodFactsApi
+import com.squareup.moshi.Moshi
+import com.squareup.moshi.kotlin.reflect.KotlinJsonAdapterFactory
+import okhttp3.OkHttpClient
+import okhttp3.logging.HttpLoggingInterceptor
+import retrofit2.Retrofit
+import retrofit2.converter.moshi.MoshiConverterFactory
 
-/**
- * @(#) NetworkModule.kt 1.0 2026-05-10
- * Copyright (c) 2026, Steve Zheng. ALL right reserved.
- * Steve Zheng PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
- */
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    // TODO(Day 7): provide Retrofit + OkHttp + Moshi + OpenFoodFactsApi
-    // For Day 2, the module exists so future @Provides methods can be added without re-wiring.
+
     @Provides
     @Singleton
-    fun provideOpenFoodFactsBaseUrl(): String = "https://world.openfoodfacts.org/"
+    fun provideOpenFoodFactsBaseUrl(): String = BuildConfig.OFF_BASE_URL
+
+    @Provides
+    @Singleton
+    fun provideMoshi(): Moshi =
+        Moshi.Builder()
+            .add(KotlinJsonAdapterFactory())
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(): OkHttpClient {
+        val logging = HttpLoggingInterceptor().apply {
+            level = if (BuildConfig.DEBUG) {
+                HttpLoggingInterceptor.Level.BASIC
+            } else {
+                HttpLoggingInterceptor.Level.NONE
+            }
+        }
+        return OkHttpClient.Builder()
+            .addInterceptor { chain ->
+                chain.proceed(
+                    chain.request()
+                        .newBuilder()
+                        .header(
+                            "User-Agent",
+                            "SmartPantry",
+                        )
+                        .build(),
+                )
+            }
+            .addInterceptor(logging)
+            .build()
+    }
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(
+        baseUrl: String,
+        okHttpClient: OkHttpClient,
+        moshi: Moshi,
+    ): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(baseUrl)
+            .client(okHttpClient)
+            .addConverterFactory(MoshiConverterFactory.create(moshi))
+            .build()
+
+    @Provides
+    @Singleton
+    fun provideOpenFoodFactsApi(retrofit: Retrofit): OpenFoodFactsApi =
+        retrofit.create(OpenFoodFactsApi::class.java)
+
+
 
 }
