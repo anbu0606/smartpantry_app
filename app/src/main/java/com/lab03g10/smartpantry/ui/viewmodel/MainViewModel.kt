@@ -19,4 +19,10 @@ class MainViewModel @Inject constructor(
         SharingStarted.WhileSubscribed(5000),
         false
     )
+
+    val isOnboardingCompleted: StateFlow<Boolean> = preferenceRepository.observeOnboardingCompleted().stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5000),
+        false
+    )
 }

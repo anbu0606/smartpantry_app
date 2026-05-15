@@ -34,7 +34,9 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.OnboardingViewModel
 import kotlinx.coroutines.launch
 
 // Private data model
@@ -91,11 +93,18 @@ private val onboardingPages = listOf(
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun OnboardingScreen(onFinish: () -> Unit) {
-
+fun OnboardingScreen(
+    onFinish:  () -> Unit,
+    viewModel: OnboardingViewModel = hiltViewModel(),
+) {
     val pagerState     = rememberPagerState(pageCount = { onboardingPages.size })
     val coroutineScope = rememberCoroutineScope()
     val isLastPage     = pagerState.currentPage == onboardingPages.size - 1
+
+    fun finish() {
+        viewModel.completeOnboarding()
+        onFinish()
+    }
 
     Box(
         modifier = Modifier
@@ -163,7 +172,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
 
         if (!isLastPage) {
             TextButton(
-                onClick  = onFinish,
+                onClick  = ::finish,
                 modifier = Modifier
                     .align(Alignment.TopEnd)
                     .padding(top = 48.dp, end = 16.dp),
@@ -210,7 +219,7 @@ fun OnboardingScreen(onFinish: () -> Unit) {
             Button(
                 onClick = {
                     if (isLastPage) {
-                        onFinish()
+                        finish()
                     } else {
                         coroutineScope.launch {
                             pagerState.animateScrollToPage(pagerState.currentPage + 1)
