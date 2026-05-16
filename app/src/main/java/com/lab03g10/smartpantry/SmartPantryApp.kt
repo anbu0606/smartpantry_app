@@ -3,6 +3,7 @@ package com.lab03g10.smartpantry
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.lab03g10.smartpantry.worker.SensorTickScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -24,8 +25,8 @@ import javax.inject.Inject
 @HiltAndroidApp
 class SmartPantryApp : Application(), Configuration.Provider {
 
-    @Inject
-    lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var workerFactory: HiltWorkerFactory
+    @Inject lateinit var sensorTickScheduler: SensorTickScheduler
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -34,6 +35,7 @@ class SmartPantryApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        sensorTickScheduler.schedule()
         // TODO: Channel creation deferred (Willy Day 6)
     }
 }

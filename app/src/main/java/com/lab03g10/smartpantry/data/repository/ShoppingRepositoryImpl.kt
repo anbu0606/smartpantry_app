@@ -14,22 +14,19 @@ import javax.inject.Singleton
  * Steve Zheng PROPRIETARY/CONFIDENTIAL. Use is subject to license terms.
  */
 @Singleton
-class ShoppingRepositoryImpl @Inject constructor (
+class ShoppingRepositoryImpl @Inject constructor(
     private val dao: ShoppingItemDao,
 ) : ShoppingRepository {
-    override fun observeAll(): Flow<List<ShoppingItemEntity>> {
-        TODO("Not yet implemented")
-    }
 
-    override suspend fun upsert(item: ShoppingItemEntity) {
-        TODO("Not yet implemented")
-    }
+    override fun observeAll(): Flow<List<ShoppingItemEntity>> =
+        dao.observeAll()
 
-    override suspend fun delete(id: String) {
-        TODO("Not yet implemented")
-    }
+    override suspend fun upsert(item: ShoppingItemEntity) =
+        dao.upsert(item)
 
-    override suspend fun toggle(id: String) {
-        TODO("Not yet implemented")
-    }
+    override suspend fun delete(id: String) =
+        dao.delete(id)
+
+    override suspend fun toggle(id: String) =
+        dao.toggle(id)
 }

@@ -3,12 +3,11 @@ package com.lab03g10.smartpantry
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import com.lab03g10.smartpantry.ui.screens.AddEditFoodScreen
 import com.lab03g10.smartpantry.ui.screens.AddSensorScreen
-import com.lab03g10.smartpantry.ui.screens.AnalyticsScreen
+import com.lab03g10.smartpantry.ui.screens.AnalyticsRoute
 import com.lab03g10.smartpantry.ui.screens.BarcodeScanResultScreen
 import com.lab03g10.smartpantry.ui.screens.DashboardScreen
 import com.lab03g10.smartpantry.ui.screens.EditSensorScreen
@@ -32,7 +31,6 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Inventory
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.QrCodeScanner
-import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -206,7 +204,7 @@ fun AppNavigation() {
                 )
             }
             composable(Route.ANALYTICS) {
-                AnalyticsScreen(
+                AnalyticsRoute(
                     onNavigateToWasteLog = { navController.navigate(Route.WASTE_LOG) },
                 )
             }

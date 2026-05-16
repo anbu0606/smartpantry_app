@@ -15,7 +15,7 @@ interface FoodRepository {
 
     fun observeUseToday(today: Long): Flow<List<FoodItemEntity>>
 
-    fun observeByCategory(today: Long): Flow<List<FoodItemEntity>>
+    fun observeByCategory(category: String): Flow<List<FoodItemEntity>>
 
     fun observeById(id: String): Flow<FoodItemEntity?>
 
@@ -28,5 +28,11 @@ interface FoodRepository {
     suspend fun markConsumed(id: String)
 
     suspend fun markWasted(id: String)
+
+    /** All active (non-consumed, non-wasted) food items stored at a given sensor location. */
+    suspend fun findActiveByStorageLocation(sensorId: String): List<FoodItemEntity>
+
+    /** Targeted update: only effectiveExpiryDate + updatedAt. */
+    suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long)
 
 }

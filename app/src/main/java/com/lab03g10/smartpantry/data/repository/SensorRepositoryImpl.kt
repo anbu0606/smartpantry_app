@@ -20,39 +20,34 @@ class SensorRepositoryImpl @Inject constructor(
     private val configDao: SensorConfigDao,
     private val readingDao: SensorReadingDao,
 ) : SensorRepository {
-    override fun observeConfigs(): Flow<List<SensorConfigEntity>> {
-        TODO("Not yet implemented")
-    }
 
-    override fun observeConfigById(id: String): Flow<SensorConfigEntity?> {
-        TODO("Not yet implemented")
-    }
+    override fun observeConfigs(): Flow<List<SensorConfigEntity>> =
+        configDao.observeAll()
 
-    override suspend fun upsertConfig(config: SensorConfigEntity) {
-        TODO("Not yet implemented")
-    }
+    override fun observeConfigById(id: String): Flow<SensorConfigEntity?> =
+        configDao.observeById(id)
 
-    override suspend fun deleteConfig(id: String) {
-        TODO("Not yet implemented")
-    }
+    override suspend fun upsertConfig(config: SensorConfigEntity) =
+        configDao.upsert(config)
 
-    override fun observeLatestPerSensor(): Flow<List<SensorReadingEntity>> {
-        TODO("Not yet implemented")
-    }
+    override suspend fun deleteConfig(id: String) =
+        configDao.delete(id)
+
+    override fun observeLatestPerSensor(): Flow<List<SensorReadingEntity>> =
+        readingDao.observeLatestPerSensor()
 
     override fun observeReadingsForSensorSince(
         sensorId: String,
-        since: Long
-    ): Flow<List<SensorReadingEntity>> {
-        TODO("Not yet implemented")
-    }
+        since: Long,
+    ): Flow<List<SensorReadingEntity>> =
+        readingDao.observeForSensorSince(sensorId, since)
 
-    override suspend fun insertReading(reading: SensorReadingEntity) {
-        TODO("Not yet implemented")
-    }
+    override suspend fun insertReading(reading: SensorReadingEntity) =
+        readingDao.insert(reading)
 
-    override suspend fun pruneReadingsOlderThan(cutoff: Long) {
-        TODO("Not yet implemented")
-    }
+    override suspend fun pruneReadingsOlderThan(cutoff: Long) =
+        readingDao.pruneOlderThan(cutoff)
 
+    override suspend fun getReadingsForSensorSince(sensorId: String, since: Long) =
+        readingDao.getReadingsForSensorSince(sensorId, since)
 }
