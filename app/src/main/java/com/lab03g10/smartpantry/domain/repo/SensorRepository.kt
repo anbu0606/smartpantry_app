@@ -28,4 +28,7 @@ interface SensorRepository {
 
     suspend fun pruneReadingsOlderThan(cutoff: Long)
 
+    /** One-shot query: all readings for a sensor since a given timestamp. Used by ShelfLifeRecalcWorker.*/
+    suspend fun getReadingsForSensorSince(sensorId: String, since: Long): List<SensorReadingEntity>
+
 }

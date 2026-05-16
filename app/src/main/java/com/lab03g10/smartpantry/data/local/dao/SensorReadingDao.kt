@@ -33,4 +33,11 @@ interface SensorReadingDao {
 
     @Query("DELETE FROM sensor_readings WHERE timestamp < :cutoff")
     suspend fun pruneOlderThan(cutoff: Long)
+
+    @Query(
+        "SELECT * FROM sensor_readings " +
+                "WHERE sensorId = :sensorId AND timestamp >= :since " +
+                "ORDER BY timestamp ASC"
+    )
+    suspend fun getReadingsForSensorSince(sensorId: String, since: Long): List<SensorReadingEntity>
 }

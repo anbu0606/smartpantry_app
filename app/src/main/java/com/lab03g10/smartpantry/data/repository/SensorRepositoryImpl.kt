@@ -47,4 +47,7 @@ class SensorRepositoryImpl @Inject constructor(
 
     override suspend fun pruneReadingsOlderThan(cutoff: Long) =
         readingDao.pruneOlderThan(cutoff)
+
+    override suspend fun getReadingsForSensorSince(sensorId: String, since: Long) =
+        readingDao.getReadingsForSensorSince(sensorId, since)
 }

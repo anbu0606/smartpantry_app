@@ -44,7 +44,7 @@ class SensorTickScheduler @Inject constructor(
         WorkManager.getInstance(context).cancelUniqueWork(UNIQUE_WORK_NAME)
     }
 
-    /** Fire-and-forget one-shot tick — for emulator smoke-test / debug menus. */
+    /** Fire-and-forget one-shot tick — SensorTickWorker.doWork() will chain to ShelfLifeRecalcWorker automatically. */
     fun triggerOnce() {
         val request = OneTimeWorkRequestBuilder<SensorTickWorker>().build()
         WorkManager.getInstance(context).enqueue(request)
