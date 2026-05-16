@@ -7,6 +7,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lab03g10.smartpantry.data.local.entity.ShoppingItemEntity
 import com.lab03g10.smartpantry.data.local.entity.WasteLogEntity
+import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import com.lab03g10.smartpantry.domain.repo.ShoppingRepository
 import com.lab03g10.smartpantry.domain.repo.WasteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -40,13 +41,20 @@ data class ShoppingListUiState(
 )
 
 /**
- * This ViewModel connects ShoppingRepository and WasteRepository to the UI.
+ * This ViewModel connects ShoppingRepository, WasteRepository
+ * and PreferenceRepository to the UI.
  */
 @HiltViewModel
 class ShoppingListViewModel @Inject constructor(
     private val shoppingRepository: ShoppingRepository,
     private val wasteRepository: WasteRepository,
+    private val preferenceRepository: PreferenceRepository,
 ) : ViewModel() {
+
+    companion object {
+        // A dismissed suggestion will stay hidden for 3 days
+        private const val SUGGESTION_COOLDOWN_MS = 3L * 24L * 60L * 60L * 1000L
+    }
 
     // This stores the current UI state
     var uiState by mutableStateOf(ShoppingListUiState())
@@ -58,10 +66,14 @@ class ShoppingListViewModel @Inject constructor(
     // Stores waste history loaded from Room database
     private var wasteLogItems: List<WasteLogEntity> = emptyList()
 
-    // Load shopping list and waste history when ViewModel starts
+    // Stores dismissed suggestion times loaded from DataStore
+    private var dismissedSuggestions: Map<String, Long> = emptyMap()
+
+    // Load shopping list, waste history and dismissed suggestions when ViewModel starts
     init {
         loadShoppingItems()
         loadWasteHistory()
+        loadDismissedSuggestions()
     }
 
     /**
@@ -70,19 +82,11 @@ class ShoppingListViewModel @Inject constructor(
     private fun loadShoppingItems() {
         viewModelScope.launch {
             try {
-
-                // Observe shopping list changes
                 shoppingRepository.observeAll().collect { shoppingItems ->
-
-                    // Save items locally
                     savedShoppingItems = shoppingItems
-
-                    // Update UI state
                     updateScreenState()
                 }
             } catch (exception: Exception) {
-
-                // Show error if loading fails
                 uiState = uiState.copy(
                     isLoading = false,
                     errorMessage = "Could not load shopping list",
@@ -99,22 +103,35 @@ class ShoppingListViewModel @Inject constructor(
     private fun loadWasteHistory() {
         viewModelScope.launch {
             try {
-
-                // Observe waste history changes
                 wasteRepository.observeAll().collect { wasteItems ->
-
-                    // Save waste items locally
                     wasteLogItems = wasteItems
-
-                    // Update UI state
                     updateScreenState()
                 }
             } catch (exception: Exception) {
-
-                // Show error if loading fails
                 uiState = uiState.copy(
                     isLoading = false,
                     errorMessage = "Could not load waste history",
+                )
+            }
+        }
+    }
+
+    /**
+     * This function loads dismissed suggestions from DataStore.
+     *
+     * This is used to stop the same suggestion from appearing again immediately.
+     */
+    private fun loadDismissedSuggestions() {
+        viewModelScope.launch {
+            try {
+                preferenceRepository.observeDismissedSuggestions().collect { dismissedMap ->
+                    dismissedSuggestions = dismissedMap
+                    updateScreenState()
+                }
+            } catch (exception: Exception) {
+                uiState = uiState.copy(
+                    isLoading = false,
+                    errorMessage = "Could not load suggestion preferences",
                 )
             }
         }
@@ -126,8 +143,22 @@ class ShoppingListViewModel @Inject constructor(
     fun onToggleItem(id: String) {
         viewModelScope.launch {
 
+            // Find the item before changing its checked state
+            val item = findShoppingItemById(id)
+
             // Toggle checked value in database
             shoppingRepository.toggle(id)
+
+            // If the user checks an auto-suggested item,
+            // remember this exact item suggestion so it does not appear again immediately.
+            if (item != null && item.autoSuggested && !item.checked) {
+                val suggestionKey = getSuggestionKey(
+                    name = item.name.removePrefix("Restock "),
+                    category = item.category,
+                )
+
+                preferenceRepository.markSuggestionDismissed(suggestionKey)
+            }
         }
     }
 
@@ -142,6 +173,18 @@ class ShoppingListViewModel @Inject constructor(
 
                 // Delete only checked items
                 if (item.checked) {
+
+                    // If this item came from suggestions,
+                    // save this exact item suggestion into DataStore before deleting.
+                    if (item.autoSuggested) {
+                        val suggestionKey = getSuggestionKey(
+                            name = item.name.removePrefix("Restock "),
+                            category = item.category,
+                        )
+
+                        preferenceRepository.markSuggestionDismissed(suggestionKey)
+                    }
+
                     shoppingRepository.delete(item.id)
                 }
             }
@@ -167,6 +210,14 @@ class ShoppingListViewModel @Inject constructor(
 
             // Save item into Room database
             shoppingRepository.upsert(item)
+
+            /*
+             * Do not save this as dismissed here.
+             *
+             * Add only moves the suggestion into the shopping list.
+             * The suggestion should be dismissed only after the user checks
+             * and clears the item.
+             */
         }
     }
 
@@ -226,34 +277,51 @@ class ShoppingListViewModel @Inject constructor(
      */
     private fun createSuggestedRows(): List<ShoppingListRowUi> {
 
-        // Store category count values
-        val categoryCounts = mutableMapOf<String, Int>()
+        // Store item count values.
+        // Example key: Frozen|fish
+        val itemCounts = mutableMapOf<String, Int>()
 
-        // Count how many times each category appears in waste history
+        // Store category for each item key
+        val itemCategories = mutableMapOf<String, String>()
+
+        // Count how many times each food item appears in waste history
         for (waste in wasteLogItems) {
+            val suggestionKey = getSuggestionKey(
+                name = waste.name,
+                category = waste.category,
+            )
 
-            val oldCount = categoryCounts[waste.category] ?: 0
+            val oldCount = itemCounts[suggestionKey] ?: 0
+            itemCounts[suggestionKey] = oldCount + 1
 
-            categoryCounts[waste.category] = oldCount + 1
+            itemCategories[suggestionKey] = waste.category
         }
 
         // Store suggested shopping rows
         val suggestedRows = mutableListOf<ShoppingListRowUi>()
 
-        // Loop through each category count
-        for (entry in categoryCounts.entries) {
-
-            val category = entry.key
+        // Loop through each wasted item count
+        for (entry in itemCounts.entries) {
+            val suggestionKey = entry.key
             val count = entry.value
 
-            // Suggest category if wasted 3 or more times
-            if (count >= 3 && !alreadyHasCategory(category)) {
+            val category = itemCategories[suggestionKey] ?: "Other"
+            val foodName = suggestionKey.substringAfter("|")
 
+            // Suggest item if:
+            // 1. The same item was wasted 3 or more times
+            // 2. It is not already in the shopping list
+            // 3. It is not inside the 3-day cooldown
+            if (
+                count >= 3 &&
+                !alreadyHasItem(foodName, category) &&
+                !isSuggestionInCooldown(suggestionKey)
+            ) {
                 suggestedRows.add(
                     ShoppingListRowUi(
-                        id = "suggestion_$category",
-                        name = "Restock $category",
-                        subtitle = "Suggested from $count waste records",
+                        id = "suggestion_$suggestionKey",
+                        name = "Restock $foodName",
+                        subtitle = "$category - Suggested from $count waste records",
                         quantity = "x1",
                         category = category,
                         checked = false,
@@ -267,19 +335,65 @@ class ShoppingListViewModel @Inject constructor(
     }
 
     /**
-     * This function checks whether the shopping list already has this category.
+     * This function checks whether the shopping list already has this suggested item.
      */
-    private fun alreadyHasCategory(category: String): Boolean {
+    private fun alreadyHasItem(
+        foodName: String,
+        category: String,
+    ): Boolean {
+        val restockName = "Restock $foodName"
 
         // Loop through shopping items
         for (item in savedShoppingItems) {
 
-            // Return true if category already exists
-            if (item.category == category) {
+            // Return true if the same suggested item already exists
+            if (item.name == restockName && item.category == category) {
                 return true
             }
         }
 
         return false
+    }
+
+    /**
+     * This function checks whether the suggestion is still in the 3-day cooldown.
+     */
+    private fun isSuggestionInCooldown(suggestionKey: String): Boolean {
+        val dismissedAt = dismissedSuggestions[suggestionKey]
+
+        if (dismissedAt == null) {
+            return false
+        }
+
+        val now = System.currentTimeMillis()
+        val timePassed = now - dismissedAt
+
+        return timePassed < SUGGESTION_COOLDOWN_MS
+    }
+
+    /**
+     * This creates one unique key for item-specific suggestions.
+     *
+     * Example:
+     * Frozen + fish becomes Frozen|fish
+     */
+    private fun getSuggestionKey(
+        name: String,
+        category: String,
+    ): String {
+        return "$category|$name"
+    }
+
+    /**
+     * This function finds a shopping item using its id.
+     */
+    private fun findShoppingItemById(id: String): ShoppingItemEntity? {
+        for (item in savedShoppingItems) {
+            if (item.id == id) {
+                return item
+            }
+        }
+
+        return null
     }
 }
