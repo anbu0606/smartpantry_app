@@ -1,6 +1,7 @@
 package com.lab03g10.smartpantry.ui.screens
 
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -88,29 +89,20 @@ fun AddEditFoodScreen(
 
     val state by viewModel.state.collectAsStateWithLifecycle()
     var categoryExpanded  by remember { mutableStateOf(false) }
-
     var storageLocationExpanded by remember { mutableStateOf(false) }
-
-
     var unitExpanded      by remember { mutableStateOf(false) }
-
 
     var showPurchasePicker by remember { mutableStateOf(false) }
     var showExpiryPicker   by remember { mutableStateOf(false) }
 
-
-    //Date picker lazy layout
-    val purchasePickerState = rememberDatePickerState(
-        initialSelectedDateMillis = state.purchaseDate,
-    )
-    val expiryPickerState = rememberDatePickerState(
-        initialSelectedDateMillis = state.nominalExpiryDate,
-    )
     LaunchedEffect(state.isSaved) {
         if (state.isSaved) onNavigateBack()
     }
 
     if (showPurchasePicker) {
+        val purchasePickerState = rememberDatePickerState(
+            initialSelectedDateMillis = state.purchaseDate,
+        )
         DatePickerDialog(
             onDismissRequest = { showPurchasePicker = false },
             confirmButton    = {
@@ -133,24 +125,27 @@ fun AddEditFoodScreen(
     }
 
     if (showExpiryPicker) {
+        val expiryPickerState = rememberDatePickerState(
+            initialSelectedDateMillis = state.nominalExpiryDate,
+        )
         DatePickerDialog(
-                onDismissRequest = {
+            onDismissRequest = {
+                viewModel.onExpiryTouched()
+                showExpiryPicker = false
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.onExpiryDateChange(expiryPickerState.selectedDateMillis)
+                    showExpiryPicker = false
+                }) { Text("OK") }
+            },
+            dismissButton = {
+                TextButton(onClick = {
                     viewModel.onExpiryTouched()
                     showExpiryPicker = false
-                },
-                confirmButton = {
-                    TextButton(onClick = {
-                        viewModel.onExpiryDateChange(expiryPickerState.selectedDateMillis)
-                        showExpiryPicker = false
-                    }) { Text("OK") }
-                },
-                dismissButton = @androidx.compose.runtime.Composable {
-                    TextButton(onClick = {
-                        viewModel.onExpiryTouched()
-                        showExpiryPicker = false
-                    }) { Text("Cancel") }
-                },
-        ) @androidx.compose.runtime.Composable {
+                }) { Text("Cancel") }
+            },
+        ) {
             DatePicker(
                 state  = expiryPickerState,
                 colors = DatePickerDefaults.colors(
@@ -267,7 +262,8 @@ fun AddEditFoodScreen(
                         onValueChange = {},
                         modifier = Modifier
                             .fillMaxWidth()
-                            .menuAnchor(),
+                            .menuAnchor()
+                            .clickable { storageLocationExpanded = !storageLocationExpanded },
                         readOnly = true,
                         label = { Text("Storage location") },
                         trailingIcon = { DropdownIcon(storageLocationExpanded) },
@@ -300,7 +296,9 @@ fun AddEditFoodScreen(
                 OutlinedTextField(
                     value = epochMillisToDisplay(state.purchaseDate),
                     onValueChange = {},
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showPurchasePicker = true },
                     readOnly = true,
                     label = { Text("Purchase date *") },
                     trailingIcon = {
@@ -319,7 +317,9 @@ fun AddEditFoodScreen(
                 OutlinedTextField(
                     value = epochMillisToDisplay(state.nominalExpiryDate),
                     onValueChange = {},
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { showExpiryPicker = true },
                     readOnly = true,
                     label = { Text("Expiry date *") },
                     trailingIcon = {
@@ -427,6 +427,7 @@ fun AddEditFoodScreen(
         }
     }
 
+
     @OptIn(ExperimentalMaterial3Api::class)
     @Composable
     private fun DropdownField(
@@ -448,7 +449,8 @@ fun AddEditFoodScreen(
                 onValueChange = {},
                 modifier = Modifier
                     .fillMaxWidth()
-                    .menuAnchor(),
+                    .menuAnchor()
+                    .clickable { onExpandedChange(!expanded) },
                 readOnly = true,
                 label = { Text(label) },
                 trailingIcon = { DropdownIcon(expanded) },
