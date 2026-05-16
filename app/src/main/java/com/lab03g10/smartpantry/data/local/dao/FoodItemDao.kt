@@ -51,4 +51,16 @@ interface FoodItemDao {
 
     @Query("UPDATE food_items SET wasted = 1, updatedAt = :at WHERE id = :id")
     suspend fun markWasted(id: String, at: Long)
+
+    @Query(
+        "SELECT * FROM food_items " +
+                "WHERE storageLocationId = :sensorId AND consumed = 0 AND wasted = 0"
+    )
+    suspend fun findActiveByStorageLocation(sensorId: String): List<FoodItemEntity>
+
+    @Query(
+        "UPDATE food_items SET effectiveExpiryDate = :effectiveExpiryDate, updatedAt = :updatedAt " +
+                "WHERE id = :id"
+    )
+    suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long, updatedAt: Long)
 }
