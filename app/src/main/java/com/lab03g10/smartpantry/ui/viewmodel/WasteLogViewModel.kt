@@ -19,6 +19,7 @@ data class WasteLogRowUi(
     val id: String,
     val foodName: String,
     val category: String,
+    val quantity: String,
     val reason: String,
     val dateLabel: String,
     val monthGroup: String,
@@ -124,7 +125,7 @@ class WasteLogViewModel @Inject constructor(
         var totalCo2e = 0f
 
         for (row in rows) {
-            totalCo2e = totalCo2e + row.co2eGrams
+            totalCo2e += row.co2eGrams
         }
 
         // Update the UI state with new values
@@ -147,6 +148,7 @@ class WasteLogViewModel @Inject constructor(
             id = id,
             foodName = name,
             category = category,
+            quantity = quantity,
             reason = formatReason(reason),
             dateLabel = formatDate(wastedAt),
             monthGroup = formatMonthGroup(wastedAt),

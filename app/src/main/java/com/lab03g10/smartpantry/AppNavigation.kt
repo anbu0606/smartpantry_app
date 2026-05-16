@@ -23,8 +23,8 @@ import com.lab03g10.smartpantry.ui.screens.ProfileScreen
 import com.lab03g10.smartpantry.ui.screens.RegistrationScreen
 import com.lab03g10.smartpantry.ui.screens.ScannerScreen
 import com.lab03g10.smartpantry.ui.screens.SensorDetailScreen
-import com.lab03g10.smartpantry.ui.screens.ShoppingListScreen
-import com.lab03g10.smartpantry.ui.screens.WasteLogScreen
+import com.lab03g10.smartpantry.ui.screens.ShoppingListRoute
+import com.lab03g10.smartpantry.ui.screens.WasteLogRoute
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
@@ -206,7 +206,9 @@ fun AppNavigation() {
                 )
             }
             composable(Route.SHOPPING_LIST) {
-                ShoppingListScreen(onNavigateBack = { navController.popBackStack() })
+                ShoppingListRoute(
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
             composable(Route.ADD_SENSOR) {
                 AddSensorScreen(onNavigateBack = { navController.popBackStack() })
@@ -226,7 +228,9 @@ fun AppNavigation() {
                 NotificationsScreen(onNavigateBack = { navController.popBackStack() })
             }
             composable(Route.WASTE_LOG) {
-                WasteLogScreen(onNavigateBack = { navController.popBackStack() })
+                WasteLogRoute(
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
             composable(Route.BARCODE_SCAN_RESULT) {
                 BarcodeScanResultScreen(
