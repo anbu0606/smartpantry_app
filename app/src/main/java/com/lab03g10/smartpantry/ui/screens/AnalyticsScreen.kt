@@ -13,6 +13,10 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import java.text.SimpleDateFormat
+import java.util.Calendar
+import java.util.Locale
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CardDefaults
@@ -115,60 +119,75 @@ fun AnalyticsScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
 
-        Column(
+        // LazyColumn allows the screen to scroll.
+        // This prevents the category rows from being cut off at the bottom.
+        LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 16.dp),
+                .padding(innerPadding),
+            contentPadding = PaddingValues(
+                start = 16.dp,
+                end = 16.dp,
+                bottom = 100.dp,
+            ),
             verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            Text(
-                text = "Waste impact from recorded pantry waste",
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            item {
+                Text(
+                    text = "Waste impact from recorded pantry waste",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
 
             // Summary cards give a quick overview before the charts.
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-            ) {
-                StatTile(
-                    value = uiState.totalWastedItems.toString(),
-                    label = "Items wasted",
-                    valueColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier
-                        .weight(1f)
-                        .clickable {
-                            onNavigateToWasteLog()
-                        },
-                )
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    StatTile(
+                        value = uiState.totalWastedItems.toString(),
+                        label = "Items wasted",
+                        valueColor = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier
+                            .weight(1f)
+                            .clickable {
+                                onNavigateToWasteLog()
+                            },
+                    )
 
-                StatTile(
-                    value = "%.1f".format(totalCo2eKg),
-                    label = "kg CO2e",
-                    valueColor = SafeGreen,
-                    modifier = Modifier.weight(1f),
-                )
+                    StatTile(
+                        value = "%.1f".format(totalCo2eKg),
+                        label = "kg CO2e",
+                        valueColor = SafeGreen,
+                        modifier = Modifier.weight(1f),
+                    )
 
-                StatTile(
-                    value = getCategoryCount(uiState).toString(),
-                    label = "Waste categories",
-                    valueColor = MaterialTheme.colorScheme.onSurface,
-                    modifier = Modifier.weight(1f),
-                )
+                    StatTile(
+                        value = getCategoryCount(uiState).toString(),
+                        label = "Waste categories",
+                        valueColor = MaterialTheme.colorScheme.onSurface,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
             }
 
-            SectionCard(
-                title = "Monthly Waste Trend",
-            ) {
-                MonthlyWasteChart(uiState = uiState)
+            item {
+                SectionCard(
+                    title = "Monthly Waste Trend",
+                    subtitle = "Showing the last 4 months",
+                ) {
+                    MonthlyWasteChart(uiState = uiState)
+                }
             }
 
-            SectionCard(
-                title = "By Category",
-            ) {
-                CategorySection(uiState = uiState)
+            item {
+                SectionCard(
+                    title = "By Category",
+                ) {
+                    CategorySection(uiState = uiState)
+                }
             }
         }
     }
@@ -196,7 +215,7 @@ private fun StatTile(
         ) {
             Text(
                 text = value,
-                style = MaterialTheme.typography.displayMedium.copy(
+                style = MaterialTheme.typography.headlineLarge.copy(
                     fontWeight = FontWeight.Light,
                 ),
                 color = valueColor,
@@ -220,6 +239,7 @@ private fun StatTile(
 private fun SectionCard(
     title: String,
     modifier: Modifier = Modifier,
+    subtitle: String? = null,
     content: @Composable () -> Unit,
 ) {
     ElevatedCard(
@@ -234,18 +254,31 @@ private fun SectionCard(
             modifier = Modifier.padding(20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.titleSmall.copy(
-                    fontWeight = FontWeight.Medium,
-                ),
-                color = MaterialTheme.colorScheme.onSurface,
-            )
+            Column(
+                verticalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Medium,
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+
+                if (subtitle != null) {
+                    Text(
+                        text = subtitle,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
 
             content()
         }
     }
 }
+
 
 /**
  * Monthly bar chart using real monthly waste totals from Room.
@@ -256,7 +289,7 @@ private fun MonthlyWasteChart(
 ) {
     val bars = getMonthlyBars(uiState)
 
-    // If there are no waste records yet, show a helpful empty message.
+    // If there are no bars, show empty message.
     if (bars.isEmpty()) {
         EmptyAnalyticsMessage(
             title = "No waste records yet",
@@ -274,59 +307,49 @@ private fun MonthlyWasteChart(
         }
     }
 
-    Column {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(160.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.Bottom,
-        ) {
-            for (bar in bars) {
-                MonthlyBar(
-                    value = bar.value,
-                    maxValue = maxValue,
-                    color = bar.color,
-                )
-            }
-        }
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround,
-        ) {
-            for (bar in bars) {
-                Text(
-                    text = bar.label,
-                    style = MaterialTheme.typography.labelSmall.copy(
-                        fontWeight = FontWeight.Bold,
-                    ),
-                    color = if (bar.isActive) SafeGreen else MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.weight(1f),
-                )
-            }
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .height(180.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.Bottom,
+    ) {
+        for (bar in bars) {
+            MonthlyBar(
+                label = bar.label,
+                value = bar.value,
+                maxValue = maxValue,
+                color = bar.color,
+                isActive = bar.isActive,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
 
 /**
- * One bar in the monthly waste chart.
- */
+* One bar in the monthly waste chart.
+*
+*/
 @Composable
 private fun MonthlyBar(
+    label: String,
     value: Int,
     maxValue: Int,
     color: Color,
+    isActive: Boolean,
+    modifier: Modifier = Modifier,
 ) {
-    // Scale the bar to fit inside the 160dp chart area.
-    val barHeight = if (maxValue == 0) {
-        0
+    // Scale the bar to fit inside the chart area.
+    // Zero values still show a tiny line so the month is visible.
+    val barHeight = if (value == 0) {
+        4
     } else {
-        (value * 140) / maxValue
+        (value * 120) / maxValue
     }
 
     Column(
+        modifier = modifier,
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Bottom,
     ) {
@@ -345,8 +368,18 @@ private fun MonthlyBar(
                     shape = RoundedCornerShape(topStart = 20.dp, topEnd = 20.dp),
                 ),
         )
+
+        Text(
+            text = label,
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.Bold,
+            ),
+            color = if (isActive) SafeGreen else MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center,
+        )
     }
 }
+
 
 /**
  * Category breakdown section using real category totals from Room.
@@ -485,20 +518,37 @@ private fun EmptyAnalyticsMessage(
 
 /**
  * Convert monthly database totals into simple chart bars.
+ *
+ * If a month has no waste records, it shows 0.
  */
 private fun getMonthlyBars(
     uiState: AnalyticsUiState,
 ): List<SimpleBar> {
+
+    // Store real Room values in a simple map.
+    // Example: "2026-05" -> 13
+    val realMonthlyCounts = mutableMapOf<String, Int>()
+
+    for (month in uiState.monthlyTotals) {
+        realMonthlyCounts[month.yearMonth] = month.count
+    }
+
+    // Create the latest 4 months based on today's date.
+    val monthsToShow = getLatestFourMonths()
+
     val barList = mutableListOf<SimpleBar>()
 
-    for (index in uiState.monthlyTotals.indices) {
-        val month = uiState.monthlyTotals[index]
+    for (index in monthsToShow.indices) {
+        val yearMonth = monthsToShow[index]
+
+        // If Room does not have this month, use 0.
+        val count = realMonthlyCounts[yearMonth] ?: 0
 
         val bar = SimpleBar(
-            label = getMonthLabel(month.yearMonth),
-            value = month.count,
+            label = getMonthLabel(yearMonth),
+            value = count,
             color = getBarColor(index),
-            isActive = index == uiState.monthlyTotals.lastIndex,
+            isActive = index == monthsToShow.lastIndex,
         )
 
         barList.add(bar)
@@ -506,6 +556,31 @@ private fun getMonthlyBars(
 
     return barList
 }
+
+/**
+ * This function returns the latest 4 months.
+ *
+ * Example:
+ * If the current month is May 2026, it returns:
+ * 2026-02, 2026-03, 2026-04, 2026-05
+ */
+private fun getLatestFourMonths(): List<String> {
+    val monthList = mutableListOf<String>()
+
+    val calendar = Calendar.getInstance()
+    calendar.add(Calendar.MONTH, -3)
+
+    val formatter = SimpleDateFormat("yyyy-MM", Locale.ENGLISH)
+
+    for (i in 0 until 4) {
+        monthList.add(formatter.format(calendar.time))
+        calendar.add(Calendar.MONTH, 1)
+    }
+
+    return monthList
+}
+
+
 
 /**
  * Convert category database totals into progress rows.
@@ -558,24 +633,36 @@ private fun getBarColor(index: Int): Color {
 }
 
 /**
- * Room returns months as values like "2026-04".
- * This function converts them to short labels like "Apr".
+ * Convert Room month values like "2026-04"
+ * into labels like "Apr 2026".
  */
 private fun getMonthLabel(yearMonth: String): String {
-    if (yearMonth.endsWith("-01")) return "Jan"
-    if (yearMonth.endsWith("-02")) return "Feb"
-    if (yearMonth.endsWith("-03")) return "Mar"
-    if (yearMonth.endsWith("-04")) return "Apr"
-    if (yearMonth.endsWith("-05")) return "May"
-    if (yearMonth.endsWith("-06")) return "Jun"
-    if (yearMonth.endsWith("-07")) return "Jul"
-    if (yearMonth.endsWith("-08")) return "Aug"
-    if (yearMonth.endsWith("-09")) return "Sep"
-    if (yearMonth.endsWith("-10")) return "Oct"
-    if (yearMonth.endsWith("-11")) return "Nov"
-    if (yearMonth.endsWith("-12")) return "Dec"
 
-    return yearMonth
+    val parts = yearMonth.split("-")
+
+    if (parts.size != 2) {
+        return yearMonth
+    }
+
+    val year = parts[0]
+
+    val month = when (parts[1]) {
+        "01" -> "Jan"
+        "02" -> "Feb"
+        "03" -> "Mar"
+        "04" -> "Apr"
+        "05" -> "May"
+        "06" -> "Jun"
+        "07" -> "Jul"
+        "08" -> "Aug"
+        "09" -> "Sep"
+        "10" -> "Oct"
+        "11" -> "Nov"
+        "12" -> "Dec"
+        else -> parts[1]
+    }
+
+    return "$month $year"
 }
 
 @Preview(name = "Light", showBackground = true, backgroundColor = 0xFFF9F9F9)
