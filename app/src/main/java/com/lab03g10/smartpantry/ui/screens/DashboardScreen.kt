@@ -540,7 +540,7 @@ private fun ShoppingListShortcut(onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text  = "3 items to buy",
+                        text  = "View shopping list",
                         style = MaterialTheme.typography.bodySmall,
                         color = LabelGrey,
                     )
