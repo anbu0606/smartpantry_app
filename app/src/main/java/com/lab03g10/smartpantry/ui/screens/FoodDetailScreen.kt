@@ -49,6 +49,7 @@ import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
 import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.util.daysUntil
 import com.lab03g10.smartpantry.ui.viewmodel.FoodDetailViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -452,13 +453,6 @@ private fun CategoryChip(label: String) {
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
     }
-}
-
-private fun daysUntil(expiryMillis: Long): Int {
-    return TimeUnit.MILLISECONDS
-        .toDays(expiryMillis - System.currentTimeMillis())
-        .toInt()
-        .coerceAtLeast(0)
 }
 
 @Preview(name = "Light", showBackground = true, backgroundColor = 0xFFF9F9F9)

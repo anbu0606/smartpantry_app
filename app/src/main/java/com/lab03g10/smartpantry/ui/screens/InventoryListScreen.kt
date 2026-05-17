@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.FoodItemCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.util.daysUntil
 
 import com.lab03g10.smartpantry.ui.viewmodel.InventoryViewModel
 import java.text.SimpleDateFormat
@@ -282,13 +283,6 @@ private fun CategoryChip(
             color = if (selected) SelectedChipText else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-private fun daysUntil(expiryMillis: Long): Int {
-    return TimeUnit.MILLISECONDS
-        .toDays(expiryMillis - System.currentTimeMillis())
-        .toInt()
-        .coerceAtLeast(0)
 }
 
 @Preview(name = "Light", showBackground = true, backgroundColor = 0xFFF9F9F9)
