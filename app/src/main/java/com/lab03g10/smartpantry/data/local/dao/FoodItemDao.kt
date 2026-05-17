@@ -63,4 +63,12 @@ interface FoodItemDao {
                 "WHERE id = :id"
     )
     suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long, updatedAt: Long)
+
+    @Query(
+        "SELECT * FROM food_items " +
+            "WHERE effectiveExpiryDate >= :startEpoch AND effectiveExpiryDate <= :endEpoch " +
+            "AND consumed = 0 AND wasted = 0 " +
+            "ORDER BY effectiveExpiryDate ASC"
+    )
+    suspend fun findExpiringBetween(startEpoch: Long, endEpoch: Long): List<FoodItemEntity>
 }

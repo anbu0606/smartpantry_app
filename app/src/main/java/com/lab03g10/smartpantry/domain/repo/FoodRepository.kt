@@ -35,4 +35,6 @@ interface FoodRepository {
     /** Targeted update: only effectiveExpiryDate + updatedAt. */
     suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long)
 
+    /** Items whose effectiveExpiryDate falls within [startEpoch, endEpoch], active only. */
+    suspend fun findExpiringBetween(startEpoch: Long, endEpoch: Long): List<FoodItemEntity>
 }
