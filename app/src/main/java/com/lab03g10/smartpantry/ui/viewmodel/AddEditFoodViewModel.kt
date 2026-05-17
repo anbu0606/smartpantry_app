@@ -30,6 +30,7 @@ data class AddEditFoodUiState(
     val quantity: String = "",
     val unit: String = "g",
     val barcode: String = "",
+    val imageUrl: String? = null,
     val purchaseDate: Long? = todayStartMillis(),
     val nominalExpiryDate: Long? = null,
     val storageLocationId: String? = null,
@@ -72,7 +73,21 @@ class AddEditFoodViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val foodId: String? = savedStateHandle["foodId"]
-    private val form = MutableStateFlow(AddEditFoodUiState(foodId = foodId))
+    private val prefillName: String? = savedStateHandle["name"]
+    private val prefillCategory: String? = savedStateHandle["category"]
+    private val prefillBarcode: String? = savedStateHandle["barcode"]
+    private val prefillImageUrl: String? = savedStateHandle["imageUrl"]
+    private val form = MutableStateFlow(
+        AddEditFoodUiState(
+            foodId = foodId,
+            name = prefillName.orEmpty(),
+            category = prefillCategory?.takeIf { it.isNotBlank() } ?: "Dairy",
+            barcode = prefillBarcode.orEmpty(),
+            imageUrl = prefillImageUrl?.takeIf { it.isNotBlank() },
+            quantity = if (prefillName.isNullOrBlank()) "" else "1",
+            unit = if (prefillName.isNullOrBlank()) "g" else "pcs",
+        ),
+    )
 
     val state: StateFlow<AddEditFoodUiState> = combine(
         form,
@@ -96,6 +111,7 @@ class AddEditFoodViewModel @Inject constructor(
                         quantity = item.quantity,
                         unit = item.unit,
                         barcode = item.barcode.orEmpty(),
+                        imageUrl = item.imageUrl,
                         purchaseDate = item.purchaseDate,
                         nominalExpiryDate = item.nominalExpiryDate,
                         storageLocationId = item.storageLocationId,
@@ -138,12 +154,10 @@ class AddEditFoodViewModel @Inject constructor(
                 quantity = current.quantity.trim(),
                 unit = current.unit,
                 barcode = current.barcode.trim().takeIf { it.isNotBlank() },
-                imageUrl = existing?.imageUrl,
+                imageUrl = existing?.imageUrl ?: current.imageUrl,
                 purchaseDate = current.purchaseDate ?: now,
                 nominalExpiryDate = current.nominalExpiryDate ?: now,
-                effectiveExpiryDate = existing?.effectiveExpiryDate
-                    ?.takeIf { current.isEditMode }
-                    ?: (current.nominalExpiryDate ?: now),
+                effectiveExpiryDate = current.nominalExpiryDate ?: existing?.effectiveExpiryDate ?: now,
                 storageLocationId = current.storageLocationId,
                 notes = current.notes.trim().takeIf { it.isNotBlank() },
                 createdAt = existing?.createdAt ?: now,
