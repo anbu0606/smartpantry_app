@@ -130,11 +130,11 @@ fun ProfileScreen(
                         style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal),
                     )
                 },
-                actions = {
-                    IconButton(onClick = { /* TODO: edit profile */ }) {
-                        Icon(imageVector = Icons.Outlined.Edit, contentDescription = "Edit profile")
-                    }
-                },
+//                actions = {
+//                    IconButton(onClick = { /* TODO: edit profile */ }) {
+//                        Icon(imageVector = Icons.Outlined.Edit, contentDescription = "Edit profile")
+//                    }
+//                },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
         },
@@ -392,6 +392,22 @@ fun ProfileScreen(
                     modifier            = Modifier.padding(horizontal = 16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
+                    // TODO-TEST: remove this button before submission
+                    Button(
+                        onClick  = { viewModel.triggerTestNotification() },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape    = RoundedCornerShape(12.dp),
+                        colors   = ButtonDefaults.buttonColors(
+                            containerColor = Color(0xFFE65100),
+                        ),
+                    ) {
+                        Text(
+                            text  = "🔔 Test Expiry Notification",
+                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
+                        )
+                    }
+                    // TODO-TEST: end of test button
+
                     Button(
                         onClick  = {
                             viewModel.setUserName(localName)
