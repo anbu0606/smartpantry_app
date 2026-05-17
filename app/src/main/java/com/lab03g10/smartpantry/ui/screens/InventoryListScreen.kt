@@ -56,7 +56,6 @@ import com.lab03g10.smartpantry.ui.viewmodel.InventoryViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 
@@ -71,9 +70,10 @@ private val FabIcon            = Color(0xFF085041)
 
 // Category list
 private val categories = listOf("All", "Dairy", "Meat", "Produce", "Dry Goods", "Frozen", "Other")
-private val listDateFmt = SimpleDateFormat("MMM d", Locale.ENGLISH).apply {
-    timeZone = TimeZone.getTimeZone("UTC")
-}
+// Display formatter — no explicit TimeZone, so SimpleDateFormat falls back to
+// the JVM default (device-local on Android). User-facing dates should read
+// in wall-clock time, not UTC. See gap-closure-checklist §10.2.
+private val listDateFmt = SimpleDateFormat("MMM d", Locale.ENGLISH)
 
 
 @OptIn(ExperimentalMaterial3Api::class)

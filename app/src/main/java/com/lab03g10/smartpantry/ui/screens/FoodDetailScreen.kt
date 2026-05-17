@@ -54,7 +54,6 @@ import com.lab03g10.smartpantry.ui.viewmodel.FoodDetailViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 
@@ -72,9 +71,10 @@ private val ReasonOptions = listOf(
     ReasonOption("OTHER",   "Other",   "Some other reason"),
 )
 
-private val detailDateFmt = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH).apply {
-    timeZone = TimeZone.getTimeZone("UTC")
-}
+// Display formatter — no explicit TimeZone, so SimpleDateFormat falls back to
+// the JVM default (device-local on Android). User-facing dates should read
+// in wall-clock time, not UTC. See gap-closure-checklist §10.2.
+private val detailDateFmt = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FoodDetailScreen(

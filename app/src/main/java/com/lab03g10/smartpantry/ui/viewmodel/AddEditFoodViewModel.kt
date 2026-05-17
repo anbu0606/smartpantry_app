@@ -10,8 +10,6 @@ import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
-import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -185,8 +183,15 @@ class AddEditFoodViewModel @Inject constructor(
     }
 }
 
+/**
+ * Epoch millis for **local** midnight today. Local — not UTC — because
+ * `purchaseDate` and the "expiry in the past" validator are user-facing
+ * concepts tied to the user's wall-clock day. UTC would shift the boundary
+ * by up to 14 h, so an 11 pm AEST add could record purchaseDate = tomorrow.
+ * See gap-closure-checklist §10.2 for the project-wide policy.
+ */
 private fun todayStartMillis(): Long {
-    val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.ENGLISH)
+    val calendar = Calendar.getInstance()    // default TimeZone = device-local
     calendar.set(Calendar.HOUR_OF_DAY, 0)
     calendar.set(Calendar.MINUTE, 0)
     calendar.set(Calendar.SECOND, 0)
