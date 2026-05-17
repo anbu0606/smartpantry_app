@@ -4,6 +4,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import java.util.concurrent.TimeUnit
 import javax.inject.Singleton
 import com.lab03g10.smartpantry.BuildConfig
 import com.lab03g10.smartpantry.data.remote.OpenFoodFactsApi
@@ -40,6 +41,11 @@ object NetworkModule {
             }
         }
         return OkHttpClient.Builder()
+            // Bound network waits so the BarcodeScanResult error path actually
+            // fires within demo time instead of hanging on flaky wifi. 10s is
+            // the gap-closure-checklist §8.2 budget for both connect and read.
+            .connectTimeout(10, TimeUnit.SECONDS)
+            .readTimeout(10, TimeUnit.SECONDS)
             .addInterceptor { chain ->
                 chain.proceed(
                     chain.request()

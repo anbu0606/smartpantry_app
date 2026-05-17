@@ -227,7 +227,9 @@ fun AppNavigation() {
             composable(Route.STORAGE_MONITOR) {
                 StorageMonitorScreen(
                     onNavigateBack           = { navController.popBackStack() },
-                    onNavigateToSensorDetail = { navController.navigate(Route.SENSOR_DETAIL) },
+                    onNavigateToSensorDetail = { sensorId ->
+                        navController.navigate(Route.sensorDetail(sensorId))
+                    }
                 )
             }
             composable(Route.SHOPPING_LIST) {

@@ -52,8 +52,11 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.AddSensorViewModel
 import kotlinx.coroutines.delay
 
 
@@ -88,13 +91,19 @@ private val SectionGreen = Color(0xFF0F6E56)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun AddSensorScreen(onNavigateBack: () -> Unit) {
+fun AddSensorScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: AddSensorViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
     var pairingStep    by remember { mutableStateOf(PairingStep.SCANNING) }
     var selectedDevice by remember { mutableStateOf<DiscoveredSensor?>(null) }
-    var sensorName     by remember { mutableStateOf("") }
-    var selectedType   by remember { mutableStateOf<EnvironmentType?>(null) }
 
-    val isFormValid = sensorName.isNotBlank() && selectedType != null
+    // Navigate back as soon as the upsert completes. Driven off the VM's
+    // isSaved flag so a screen rotation mid-save still triggers it.
+    LaunchedEffect(state.isSaved) {
+        if (state.isSaved) onNavigateBack()
+    }
 
     // Simulating the IoT scan
     LaunchedEffect(Unit) {
@@ -150,20 +159,25 @@ fun AddSensorScreen(onNavigateBack: () -> Unit) {
                 modifier         = Modifier.padding(innerPadding),
                 onDeviceSelected = { device ->
                     selectedDevice = device
-                    sensorName     = ""     // reset form when a new device is chosen
-                    selectedType   = null
-                    pairingStep    = PairingStep.CONFIGURING
+                    // Mirror the BLE-discovered id into the VM so save() picks it up;
+                    // displayName/environmentType are reset to defaults via the VM
+                    // (REFRIGERATOR is fine — user can change before saving).
+                    viewModel.onDeviceIdChange(device.deviceId)
+                    viewModel.onDisplayNameChange("")
+                    viewModel.onEnvironmentChange(EnvironmentType.REFRIGERATOR)
+                    pairingStep = PairingStep.CONFIGURING
                 },
             )
             PairingStep.CONFIGURING -> ConfiguringContent(
                 modifier           = Modifier.padding(innerPadding),
                 device             = selectedDevice!!,
-                sensorName         = sensorName,
-                onSensorNameChange = { sensorName = it },
-                selectedType       = selectedType,
-                onTypeSelected     = { selectedType = it },
-                isFormValid        = isFormValid,
-                onPair             = onNavigateBack,
+                sensorName         = state.displayName,
+                onSensorNameChange = viewModel::onDisplayNameChange,
+                selectedType       = state.environmentType,
+                onTypeSelected     = viewModel::onEnvironmentChange,
+                isFormValid        = state.isValid,
+                isSaving           = state.isSaving,
+                onPair             = viewModel::save,
             )
         }
     }
@@ -242,9 +256,10 @@ private fun ConfiguringContent(
     device: DiscoveredSensor,
     sensorName: String,
     onSensorNameChange: (String) -> Unit,
-    selectedType: EnvironmentType?,
+    selectedType: EnvironmentType,
     onTypeSelected: (EnvironmentType) -> Unit,
     isFormValid: Boolean,
+    isSaving: Boolean,
     onPair: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -340,12 +355,12 @@ private fun ConfiguringContent(
 
         //Pair Sensor button
         Button(
-            onClick        = { if (isFormValid) onPair() },
+            onClick        = { if (isFormValid && !isSaving) onPair() },
             modifier       = Modifier
                 .fillMaxWidth()
                 .padding(top = 8.dp)
                 .height(52.dp),
-            enabled        = isFormValid,
+            enabled        = isFormValid && !isSaving,
             shape          = RoundedCornerShape(50),
             colors         = ButtonDefaults.buttonColors(
                 containerColor         = MaterialTheme.colorScheme.primary,
@@ -356,12 +371,20 @@ private fun ConfiguringContent(
             ),
             contentPadding = PaddingValues(vertical = 14.dp),
         ) {
-            Text(
-                text  = "Pair Sensor",
-                style = MaterialTheme.typography.labelLarge.copy(
-                    fontWeight = FontWeight.Bold,
-                ),
-            )
+            if (isSaving) {
+                CircularProgressIndicator(
+                    modifier   = Modifier.size(20.dp),
+                    color      = MaterialTheme.colorScheme.onPrimary,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text(
+                    text  = "Pair Sensor",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.Bold,
+                    ),
+                )
+            }
         }
 
         Spacer(Modifier.height(16.dp))
@@ -569,6 +592,7 @@ private fun PreviewConfiguringLight() {
             selectedType       = EnvironmentType.REFRIGERATOR,
             onTypeSelected     = {},
             isFormValid        = false,
+            isSaving           = false,
             onPair             = {},
         )
     }
@@ -590,6 +614,7 @@ private fun PreviewConfiguringDark() {
             selectedType       = EnvironmentType.REFRIGERATOR,
             onTypeSelected     = {},
             isFormValid        = true,
+            isSaving           = false,
             onPair             = {},
         )
     }

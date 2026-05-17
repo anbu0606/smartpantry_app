@@ -12,6 +12,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.outlined.ShoppingCart
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
@@ -24,6 +25,7 @@ import androidx.compose.ui.text.style.TextDecoration
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 import com.lab03g10.smartpantry.ui.viewmodel.ShoppingListRowUi
 import com.lab03g10.smartpantry.ui.viewmodel.ShoppingListUiState
@@ -132,6 +134,19 @@ fun ShoppingListScreen(
             )
         }
     ) { innerPadding ->
+
+        // Full-empty state — both the user-added list AND the auto-suggestions are
+        // empty. Per-section "no items / no suggestions" hints below still cover
+        // the asymmetric cases (one section populated, the other empty).
+        if (uiState.items.isEmpty() && uiState.suggestedItems.isEmpty()) {
+            EmptyState(
+                icon           = Icons.Outlined.ShoppingCart,
+                title          = "Nothing on your list",
+                supportingText = "Add an item, or wait for auto-suggestions from your waste history.",
+                modifier       = Modifier.padding(innerPadding),
+            )
+            return@Scaffold
+        }
 
         // Scrollable list
         LazyColumn(

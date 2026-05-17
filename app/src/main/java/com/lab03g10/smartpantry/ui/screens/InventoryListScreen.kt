@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -46,14 +47,15 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.FoodItemCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.util.daysUntil
 
 import com.lab03g10.smartpantry.ui.viewmodel.InventoryViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 
@@ -68,9 +70,10 @@ private val FabIcon            = Color(0xFF085041)
 
 // Category list
 private val categories = listOf("All", "Dairy", "Meat", "Produce", "Dry Goods", "Frozen", "Other")
-private val listDateFmt = SimpleDateFormat("MMM d", Locale.ENGLISH).apply {
-    timeZone = TimeZone.getTimeZone("UTC")
-}
+// Display formatter — no explicit TimeZone, so SimpleDateFormat falls back to
+// the JVM default (device-local on Android). User-facing dates should read
+// in wall-clock time, not UTC. See gap-closure-checklist §10.2.
+private val listDateFmt = SimpleDateFormat("MMM d", Locale.ENGLISH)
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -155,6 +158,21 @@ fun InventoryListScreen(
                 }
             }
 
+            // Distinguish "no items in the pantry at all" from "filter/search hides everything".
+            val emptyTitle = when {
+                state.searchQuery.isNotBlank() -> "No matches for \"${state.searchQuery}\""
+                state.selectedCategory != "All" -> "No ${state.selectedCategory.lowercase()} items"
+                else -> "Your pantry is empty"
+            }
+            val emptySupporting = when {
+                state.searchQuery.isNotBlank() ->
+                    "Try a different search or clear the search box."
+                state.selectedCategory != "All" ->
+                    "Switch to All or tap + to add ${state.selectedCategory.lowercase()}."
+                else ->
+                    "Tap + to add your first food item, or scan a barcode from the Scanner tab."
+            }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -164,6 +182,15 @@ fun InventoryListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (state.items.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon           = Icons.Outlined.Inventory2,
+                            title          = emptyTitle,
+                            supportingText = emptySupporting,
+                        )
+                    }
+                }
                 items(
                     items = state.items,
                     key = { it.id },
@@ -256,13 +283,6 @@ private fun CategoryChip(
             color = if (selected) SelectedChipText else MaterialTheme.colorScheme.onSurfaceVariant,
         )
     }
-}
-
-private fun daysUntil(expiryMillis: Long): Int {
-    return TimeUnit.MILLISECONDS
-        .toDays(expiryMillis - System.currentTimeMillis())
-        .toInt()
-        .coerceAtLeast(0)
 }
 
 @Preview(name = "Light", showBackground = true, backgroundColor = 0xFFF9F9F9)

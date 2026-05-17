@@ -10,8 +10,6 @@ import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
-import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -157,7 +155,21 @@ class AddEditFoodViewModel @Inject constructor(
                 imageUrl = existing?.imageUrl ?: current.imageUrl,
                 purchaseDate = current.purchaseDate ?: now,
                 nominalExpiryDate = current.nominalExpiryDate ?: now,
-                effectiveExpiryDate = current.nominalExpiryDate ?: existing?.effectiveExpiryDate ?: now,
+                // Three-case fix for the regression introduced in a00483a:
+                //   A — add mode: nothing to preserve, start from nominal.
+                //   B — edit mode AND user changed nominalExpiryDate: their explicit
+                //       edit takes precedence; ShelfLifeRecalcWorker will re-adjust
+                //       on the next tick.
+                //   C — edit mode but expiry untouched: preserve the worker's
+                //       computed effective value so context-aware recalculation
+                //       isn't silently undone by a no-op edit-save.
+                effectiveExpiryDate = when {
+                    !current.isEditMode -> current.nominalExpiryDate ?: now
+                    current.nominalExpiryDate != null
+                        && current.nominalExpiryDate != existing?.nominalExpiryDate ->
+                            current.nominalExpiryDate
+                    else -> existing?.effectiveExpiryDate ?: current.nominalExpiryDate ?: now
+                },
                 storageLocationId = current.storageLocationId,
                 notes = current.notes.trim().takeIf { it.isNotBlank() },
                 createdAt = existing?.createdAt ?: now,
@@ -171,8 +183,15 @@ class AddEditFoodViewModel @Inject constructor(
     }
 }
 
+/**
+ * Epoch millis for **local** midnight today. Local — not UTC — because
+ * `purchaseDate` and the "expiry in the past" validator are user-facing
+ * concepts tied to the user's wall-clock day. UTC would shift the boundary
+ * by up to 14 h, so an 11 pm AEST add could record purchaseDate = tomorrow.
+ * See gap-closure-checklist §10.2 for the project-wide policy.
+ */
 private fun todayStartMillis(): Long {
-    val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.ENGLISH)
+    val calendar = Calendar.getInstance()    // default TimeZone = device-local
     calendar.set(Calendar.HOUR_OF_DAY, 0)
     calendar.set(Calendar.MINUTE, 0)
     calendar.set(Calendar.SECOND, 0)

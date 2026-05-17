@@ -25,7 +25,10 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Notifications
+import androidx.compose.material3.Badge
+import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -37,6 +40,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
@@ -49,11 +53,18 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.DashboardViewModel
+import com.lab03g10.smartpantry.ui.viewmodel.SensorCardUi
 import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.LocalTime
+import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.launch
 
 private val AvatarGreen    = Color(0xFF1D9E75)
@@ -65,21 +76,9 @@ private val LabelGrey      = Color(0xFF888888)
 private val ShortcutChipBg = Color(0xFFC8E6C9)
 private val ShortcutIcon   = Color(0xFF085041)
 
-private data class SensorLocation(
-    val name: String,
-    val temperature: Float,
-    val humidity: Float,
-    val lux: Float,
-    val isNormal: Boolean,
-)
-
-private val sensorLocations = listOf(
-    SensorLocation("Fridge",    4.2f,  58f,  12f,  true),
-    SensorLocation("Pantry",   26.5f,  63f, 285f,  false),
-    SensorLocation("Cupboard", 21.0f,  45f,  38f,  true),
-)
-
-// urgency card data
+// Lightweight in-screen DTO for the "Use Today" LazyRow — derived from
+// FoodItemEntity at render time so the screen doesn't leak entity coupling
+// into the card composable.
 private data class UrgencyItem(
     val emoji: String,
     val name: String,
@@ -87,11 +86,23 @@ private data class UrgencyItem(
     val isErrorBadge: Boolean,
 )
 
-private val sampleUrgencyItems = listOf(
-    UrgencyItem("🥛", "Milk",           "Expires today", true),
-    UrgencyItem("🍗", "Chicken Breast", "1 day left",    false),
-    UrgencyItem("🥬", "Spinach",        "2 days left",   false),
-)
+private fun FoodItemEntity.toUrgencyItem(nowMillis: Long): UrgencyItem {
+    val daysLeft = TimeUnit.MILLISECONDS.toDays(effectiveExpiryDate - nowMillis)
+    val badge = when {
+        daysLeft <= 0L -> "Expires today"
+        daysLeft == 1L -> "1 day left"
+        else           -> "$daysLeft days left"
+    }
+    val emoji = when (category) {
+        "Dairy"     -> "🥛"
+        "Meat"      -> "🍗"
+        "Produce"   -> "🥬"
+        "Grains", "Dry Goods" -> "🍞"
+        "Frozen"    -> "🧊"
+        else        -> "🥫"
+    }
+    return UrgencyItem(emoji = emoji, name = name, badge = badge, isErrorBadge = daysLeft <= 0L)
+}
 
 
 /**
@@ -118,13 +129,23 @@ fun DashboardScreen(
     onNavigateToNotifications: () -> Unit,
     onNavigateToExpiryCalendar: () -> Unit,
     onNavigateToProfile: () -> Unit,
-    onNavigateToInventory: () -> Unit
+    onNavigateToInventory: () -> Unit,
+    viewModel: DashboardViewModel = hiltViewModel(),
 ) {
-    val pagerState    = rememberPagerState(pageCount = { sensorLocations.size + 1 })
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    val pageCount      = state.sensorCards.size + 1
+    val pagerState     = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
+    val addPageIndex   = state.sensorCards.size
 
     Scaffold(
-        topBar         = { DashboardTopBar(onNavigateToNotifications = onNavigateToNotifications, onNavigateToProfile) },
+        topBar         = {
+            DashboardTopBar(
+                unreadCount = state.unreadNotificationCount,
+                onNavigateToNotifications = onNavigateToNotifications,
+                onNavigateToProfile = onNavigateToProfile,
+            )
+        },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
         LazyColumn(
@@ -137,7 +158,10 @@ fun DashboardScreen(
 
             // Time-aware greeting
             item {
-                TimeGreeting(modifier = Modifier.padding(horizontal = 16.dp))
+                TimeGreeting(
+                    useTodayCount = state.useTodayItems.size,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
 
             //Swipeable sensor cards - sensory context
@@ -148,14 +172,14 @@ fun DashboardScreen(
                         state    = pagerState,
                         modifier = Modifier.padding(horizontal = 16.dp),
                     ) { page ->
-                        if (page < sensorLocations.size) {
-                            val loc = sensorLocations[page]
+                        if (page < state.sensorCards.size) {
+                            val card = state.sensorCards[page]
                             TemperatureCard(
-                                locationName = loc.name,
-                                temperature  = loc.temperature,
-                                humidity     = loc.humidity,
-                                lux          = loc.lux,
-                                isNormal     = loc.isNormal,
+                                locationName = card.displayName,
+                                temperature  = card.temperatureC,
+                                humidity     = card.humidity,
+                                lux          = card.lux,
+                                isNormal     = card.isNormal,
                                 modifier     = Modifier.clickable { onNavigateToStorageMonitor() },
                             )
                         } else {
@@ -171,7 +195,7 @@ fun DashboardScreen(
                         verticalAlignment     = Alignment.CenterVertically,
                     ) {
                         // One dot per real sensor location
-                        repeat(sensorLocations.size) { index ->
+                        repeat(state.sensorCards.size) { index ->
                             val selected = pagerState.currentPage == index
                             Box(
                                 modifier = Modifier
@@ -188,7 +212,7 @@ fun DashboardScreen(
                         Box(modifier = Modifier.padding(horizontal = 4.dp))
 
                         // "+" circle actives when on the add-sensor page
-                        val addSelected = pagerState.currentPage == sensorLocations.size
+                        val addSelected = pagerState.currentPage == addPageIndex
                         Box(
                             modifier         = Modifier
                                 .size(20.dp)
@@ -199,7 +223,7 @@ fun DashboardScreen(
                                 )
                                 .clickable {
                                     coroutineScope.launch {
-                                        pagerState.animateScrollToPage(sensorLocations.size)
+                                        pagerState.animateScrollToPage(addPageIndex)
                                     }
                                 },
                             contentAlignment = Alignment.Center,
@@ -219,24 +243,43 @@ fun DashboardScreen(
                 }
             }
 
-            item { UseTodaySection(onNavigateToInventory) }
+            item {
+                UseTodaySection(
+                    items = state.useTodayItems,
+                    onNavigateToInventory = onNavigateToInventory,
+                )
+            }
 
             // Inventory stats
-            item { InventoryOverviewSection() }
+            item {
+                InventoryOverviewSection(
+                    totalItemCount     = state.totalItemCount,
+                    expiringTodayCount = state.expiringTodayCount,
+                    expiringWeekCount  = state.expiringThisWeekCount,
+                )
+            }
 
             // Shopping list shortcuts
             item { ShoppingListShortcut(onClick = onNavigateToShoppingList) }
 
             // Expiry calendar shortcut
-            item { ExpiryCalendarShortcut(onClick = onNavigateToExpiryCalendar) }
+            item {
+                ExpiryCalendarShortcut(
+                    expiringWeekCount = state.expiringThisWeekCount,
+                    onClick = onNavigateToExpiryCalendar,
+                )
+            }
         }
     }
 }
 
 //  Time-aware greeting
 @Composable
-private fun TimeGreeting(modifier: Modifier = Modifier) {
-    val (greeting, subtitle) = remember {
+private fun TimeGreeting(
+    useTodayCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val (greeting, subtitle) = remember(useTodayCount) {
         val hour = LocalTime.now().hour
         val day  = LocalDate.now().dayOfWeek
 
@@ -247,12 +290,15 @@ private fun TimeGreeting(modifier: Modifier = Modifier) {
             else      -> "Good night"
         }
 
+        // Pluralise around the live count so "1 item" / "0 items" reads naturally.
+        val noun = if (useTodayCount == 1) "item" else "items"
+
         val s = when {
-            day == DayOfWeek.FRIDAY && hour >= 15        -> "Friday evening - great time to restock"
-            day in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) -> "Weekend - 3 items expiring soon"
-            hour in 6..9                                 -> "3 items need using today"
-            hour in 17..20                               -> "Dinner time - check what to cook"
-            else                                         -> "3 items need attention today"
+            day == DayOfWeek.FRIDAY && hour >= 15               -> "Friday evening — great time to restock"
+            day in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) -> "Weekend — $useTodayCount $noun expiring soon"
+            hour in 6..9                                        -> "$useTodayCount $noun need using today"
+            hour in 17..20                                      -> "Dinner time — check what to cook"
+            else                                                -> "$useTodayCount $noun need attention today"
         }
 
         g to s
@@ -282,6 +328,7 @@ private fun TimeGreeting(modifier: Modifier = Modifier) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DashboardTopBar(
+    unreadCount: Int,
     onNavigateToNotifications: () -> Unit,
     onNavigateToProfile: () -> Unit) {
     CenterAlignedTopAppBar(
@@ -296,11 +343,25 @@ private fun DashboardTopBar(
         },
         actions = {
             IconButton(onClick = onNavigateToNotifications) {
-                Icon(
-                    imageVector        = Icons.Outlined.Notifications,
-                    contentDescription = "Notifications",
-                    tint               = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
+                BadgedBox(
+                    badge = {
+                        if (unreadCount > 0) {
+                            Badge {
+                                Text(text = if (unreadCount > 99) "99+" else unreadCount.toString())
+                            }
+                        }
+                    },
+                ) {
+                    Icon(
+                        imageVector        = Icons.Outlined.Notifications,
+                        contentDescription = if (unreadCount > 0) {
+                            "Notifications, $unreadCount unread"
+                        } else {
+                            "Notifications"
+                        },
+                        tint               = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
             }
             Box(
                 modifier         = Modifier
@@ -330,7 +391,13 @@ private fun DashboardTopBar(
 
 //Use Today" section
 @Composable
-private fun UseTodaySection(onNavigateToInventory: () -> Unit) {
+private fun UseTodaySection(
+    items: List<FoodItemEntity>,
+    onNavigateToInventory: () -> Unit,
+) {
+    val now = remember(items) { System.currentTimeMillis() }
+    val urgencyItems = remember(items, now) { items.map { it.toUrgencyItem(now) } }
+
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(
             modifier              = Modifier
@@ -370,18 +437,26 @@ private fun UseTodaySection(onNavigateToInventory: () -> Unit) {
             }
         }
 
-        LazyRow(
-            contentPadding        = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(sampleUrgencyItems) { item ->
-                UrgencyCard(
-                    emoji      = item.emoji,
-                    name       = item.name,
-                    badge      = item.badge,
-                    badgeColor = if (item.isErrorBadge) MaterialTheme.colorScheme.error
-                                 else WarningAmber,
+        if (urgencyItems.isEmpty()) {
+            EmptyState(
+                icon           = Icons.Outlined.CheckCircle,
+                title          = "Nothing to use today 🎉",
+                compact = true,
                 )
+        } else {
+            LazyRow(
+                contentPadding        = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(urgencyItems) { item ->
+                    UrgencyCard(
+                        emoji      = item.emoji,
+                        name       = item.name,
+                        badge      = item.badge,
+                        badgeColor = if (item.isErrorBadge) MaterialTheme.colorScheme.error
+                                     else WarningAmber,
+                    )
+                }
             }
         }
     }
@@ -434,7 +509,11 @@ private fun UrgencyCard(
 
 //Inventory Overview section
 @Composable
-private fun InventoryOverviewSection() {
+private fun InventoryOverviewSection(
+    totalItemCount: Int,
+    expiringTodayCount: Int,
+    expiringWeekCount: Int,
+) {
     Column(
         modifier            = Modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -450,9 +529,9 @@ private fun InventoryOverviewSection() {
             modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            StatTile("24", "Total Items",    MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-            StatTile("3",  "Expiring Today", MaterialTheme.colorScheme.error,   Modifier.weight(1f))
-            StatTile("7",  "This Week",      WarningAmber,                       Modifier.weight(1f))
+            StatTile(totalItemCount.toString(),     "Total Items",    MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+            StatTile(expiringTodayCount.toString(), "Expiring Today", MaterialTheme.colorScheme.error,   Modifier.weight(1f))
+            StatTile(expiringWeekCount.toString(),  "This Week",      WarningAmber,                      Modifier.weight(1f))
         }
     }
 }
@@ -618,7 +697,11 @@ private fun AddSensorCard(
 //expiry calendar shortcut card
 
 @Composable
-private fun ExpiryCalendarShortcut(onClick: () -> Unit) {
+private fun ExpiryCalendarShortcut(
+    expiringWeekCount: Int,
+    onClick: () -> Unit,
+) {
+    val noun = if (expiringWeekCount == 1) "item" else "items"
     Surface(
         onClick        = onClick,
         modifier       = Modifier
@@ -663,7 +746,7 @@ private fun ExpiryCalendarShortcut(onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text  = "2 items expiring this week",
+                        text  = "$expiringWeekCount $noun expiring this week",
                         style = MaterialTheme.typography.bodySmall,
                         color = LabelGrey,
                     )
@@ -686,15 +769,7 @@ private fun ExpiryCalendarShortcut(onClick: () -> Unit) {
 @Composable
 private fun PreviewDashboardLight() {
     SmartPantryTheme {
-        DashboardScreen(
-            onNavigateToStorageMonitor = {},
-            onNavigateToShoppingList   = {},
-            onNavigateToAddSensor      = {},
-            onNavigateToNotifications  = {},
-            onNavigateToExpiryCalendar = {},
-            onNavigateToProfile = {},
-            onNavigateToInventory = {},
-        )
+        Text("Dashboard preview uses live app data at runtime.")
     }
 }
 
@@ -707,14 +782,6 @@ private fun PreviewDashboardLight() {
 @Composable
 private fun PreviewDashboardDark() {
     SmartPantryTheme(darkTheme = true) {
-        DashboardScreen(
-            onNavigateToStorageMonitor = {},
-            onNavigateToShoppingList   = {},
-            onNavigateToAddSensor      = {},
-            onNavigateToNotifications  = {},
-            onNavigateToExpiryCalendar = {},
-            onNavigateToProfile = {},
-            onNavigateToInventory = {},
-        )
+        Text("Dashboard preview uses live app data at runtime.")
     }
 }

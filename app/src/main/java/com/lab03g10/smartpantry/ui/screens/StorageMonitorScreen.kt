@@ -15,6 +15,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
@@ -46,6 +47,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 
@@ -57,6 +59,7 @@ private val ThresholdOrange = Color(0xFFF57F17)
 private val GridLine       = Color(0xFFE0E0E0)
 
 private data class LocationConfig(
+    val sensorId: String,
     val name: String,
     val emoji: String,
     val currentTemp: Float,
@@ -76,6 +79,7 @@ private data class LocationConfig(
 
 private val locations = listOf(
     LocationConfig(
+        sensorId               = "sensor-fridge",
         name                   = "Fridge",
         emoji                  = "🧊",
         currentTemp            = 4.2f,
@@ -93,6 +97,7 @@ private val locations = listOf(
         chartMaxTemp           = 10.0f,
     ),
     LocationConfig(
+        sensorId               = "sensor-pantry",
         name                   = "Pantry",
         emoji                  = "🌡",
         currentTemp            = 26.5f,
@@ -110,6 +115,7 @@ private val locations = listOf(
         chartMaxTemp           = 35.0f,
     ),
     LocationConfig(
+        sensorId               = "sensor-cupboard",
         name                   = "Cupboard",
         emoji                  = "🚪",
         currentTemp            = 21.0f,
@@ -141,8 +147,36 @@ private val metricTabs = listOf("🌡 Temperature", "💧 Humidity", "☀ Light"
 @Composable
 fun StorageMonitorScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToSensorDetail: () -> Unit = {},
+    onNavigateToSensorDetail: (String) -> Unit = {},
 ) {
+    // Forward-compat for when Abinaya replaces `locations` with VM state — once
+    // the list can actually be empty, the EmptyState below renders instead of
+    // crashing the tabs/index access.
+    if (locations.isEmpty()) {
+        Scaffold(
+            topBar = {
+                TopAppBar(
+                    title = { Text("Storage Monitor", style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Normal)) },
+                    navigationIcon = {
+                        IconButton(onClick = onNavigateBack) {
+                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                        }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
+                )
+            },
+            containerColor = MaterialTheme.colorScheme.background,
+        ) { innerPadding ->
+            EmptyState(
+                icon           = Icons.Outlined.Sensors,
+                title          = "No sensors paired yet",
+                supportingText = "Pair a sensor from the Dashboard to start monitoring storage conditions.",
+                modifier       = Modifier.padding(innerPadding),
+            )
+        }
+        return
+    }
+
     var selectedTab       by remember { mutableIntStateOf(0) }
     var selectedMetricTab by remember { mutableIntStateOf(0) }
     val location = locations[selectedTab]
@@ -167,7 +201,7 @@ fun StorageMonitorScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onNavigateToSensorDetail) {
+                    IconButton(onClick = { onNavigateToSensorDetail(locations[selectedTab].sensorId) }) {
                         Icon(
                             imageVector        = Icons.Outlined.Settings,
                             contentDescription = "Sensor settings",
