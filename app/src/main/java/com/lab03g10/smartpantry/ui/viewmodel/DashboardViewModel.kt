@@ -43,6 +43,9 @@ data class DashboardUiState(
     val useTodayItems: List<FoodItemEntity> = emptyList(),
     val sensorCards: List<SensorCardUi> = emptyList(),
     val unreadNotificationCount: Int = 0,
+    val totalItemCount: Int = 0,
+    val expiringTodayCount: Int = 0,
+    val expiringThisWeekCount: Int = 0,
 )
 
 @HiltViewModel
@@ -56,7 +59,8 @@ class DashboardViewModel @Inject constructor(
         sensorRepository.observeConfigs(),
         sensorRepository.observeLatestPerSensor(),
         notificationRepository.observeUnreadCount(),
-    ) { useToday, configs, readings, unread ->
+        foodRepository.observeAll(),
+    ) { useToday, configs, readings, unread, allItems ->
         val readingsBySensor = readings.associateBy { it.sensorId }
         val cards = configs.filter { it.active }.map { config ->
             val reading = readingsBySensor[config.id]
@@ -71,10 +75,18 @@ class DashboardViewModel @Inject constructor(
                 hasReading   = reading != null,
             )
         }
+        // Inventory counts: exclude already-consumed / already-wasted rows so the
+        // tiles reflect what's *currently* in the pantry, not lifetime totals.
+        val activeItems = allItems.filter { !it.consumed && !it.wasted }
+        val endOfToday = endOfTodayMillis()
+        val endOfWeek  = endOfThisWeekMillis()
         DashboardUiState(
-            useTodayItems = useToday,
-            sensorCards = cards,
+            useTodayItems           = useToday,
+            sensorCards             = cards,
             unreadNotificationCount = unread,
+            totalItemCount          = activeItems.size,
+            expiringTodayCount      = activeItems.count { it.effectiveExpiryDate <= endOfToday },
+            expiringThisWeekCount   = activeItems.count { it.effectiveExpiryDate <= endOfWeek },
         )
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), DashboardUiState())
 }
@@ -89,6 +101,21 @@ class DashboardViewModel @Inject constructor(
  * decision.
  */
 private fun endOfTodayMillis(): Long = Calendar.getInstance().apply {
+    set(Calendar.HOUR_OF_DAY, 23)
+    set(Calendar.MINUTE, 59)
+    set(Calendar.SECOND, 59)
+    set(Calendar.MILLISECOND, 999)
+}.timeInMillis
+
+/**
+ * 23:59:59.999 of "today + 6 days" in the device's local timezone — i.e. a
+ * rolling 7-day window starting today, matching the "This Week" stat tile
+ * and the Expiry Calendar shortcut. Rolling — not "end of current calendar
+ * week" — because the user's intuition for "this week" is "next 7 days",
+ * not "until Sunday".
+ */
+private fun endOfThisWeekMillis(): Long = Calendar.getInstance().apply {
+    add(Calendar.DAY_OF_YEAR, 6)
     set(Calendar.HOUR_OF_DAY, 23)
     set(Calendar.MINUTE, 59)
     set(Calendar.SECOND, 59)

@@ -156,7 +156,10 @@ fun DashboardScreen(
 
             // Time-aware greeting
             item {
-                TimeGreeting(modifier = Modifier.padding(horizontal = 16.dp))
+                TimeGreeting(
+                    useTodayCount = state.useTodayItems.size,
+                    modifier = Modifier.padding(horizontal = 16.dp),
+                )
             }
 
             //Swipeable sensor cards - sensory context
@@ -246,21 +249,35 @@ fun DashboardScreen(
             }
 
             // Inventory stats
-            item { InventoryOverviewSection() }
+            item {
+                InventoryOverviewSection(
+                    totalItemCount     = state.totalItemCount,
+                    expiringTodayCount = state.expiringTodayCount,
+                    expiringWeekCount  = state.expiringThisWeekCount,
+                )
+            }
 
             // Shopping list shortcuts
             item { ShoppingListShortcut(onClick = onNavigateToShoppingList) }
 
             // Expiry calendar shortcut
-            item { ExpiryCalendarShortcut(onClick = onNavigateToExpiryCalendar) }
+            item {
+                ExpiryCalendarShortcut(
+                    expiringWeekCount = state.expiringThisWeekCount,
+                    onClick = onNavigateToExpiryCalendar,
+                )
+            }
         }
     }
 }
 
 //  Time-aware greeting
 @Composable
-private fun TimeGreeting(modifier: Modifier = Modifier) {
-    val (greeting, subtitle) = remember {
+private fun TimeGreeting(
+    useTodayCount: Int,
+    modifier: Modifier = Modifier,
+) {
+    val (greeting, subtitle) = remember(useTodayCount) {
         val hour = LocalTime.now().hour
         val day  = LocalDate.now().dayOfWeek
 
@@ -271,12 +288,15 @@ private fun TimeGreeting(modifier: Modifier = Modifier) {
             else      -> "Good night"
         }
 
+        // Pluralise around the live count so "1 item" / "0 items" reads naturally.
+        val noun = if (useTodayCount == 1) "item" else "items"
+
         val s = when {
-            day == DayOfWeek.FRIDAY && hour >= 15        -> "Friday evening - great time to restock"
-            day in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) -> "Weekend - 3 items expiring soon"
-            hour in 6..9                                 -> "3 items need using today"
-            hour in 17..20                               -> "Dinner time - check what to cook"
-            else                                         -> "3 items need attention today"
+            day == DayOfWeek.FRIDAY && hour >= 15               -> "Friday evening — great time to restock"
+            day in listOf(DayOfWeek.SATURDAY, DayOfWeek.SUNDAY) -> "Weekend — $useTodayCount $noun expiring soon"
+            hour in 6..9                                        -> "$useTodayCount $noun need using today"
+            hour in 17..20                                      -> "Dinner time — check what to cook"
+            else                                                -> "$useTodayCount $noun need attention today"
         }
 
         g to s
@@ -479,7 +499,11 @@ private fun UrgencyCard(
 
 //Inventory Overview section
 @Composable
-private fun InventoryOverviewSection() {
+private fun InventoryOverviewSection(
+    totalItemCount: Int,
+    expiringTodayCount: Int,
+    expiringWeekCount: Int,
+) {
     Column(
         modifier            = Modifier.padding(horizontal = 16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -495,9 +519,9 @@ private fun InventoryOverviewSection() {
             modifier              = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            StatTile("24", "Total Items",    MaterialTheme.colorScheme.primary, Modifier.weight(1f))
-            StatTile("3",  "Expiring Today", MaterialTheme.colorScheme.error,   Modifier.weight(1f))
-            StatTile("7",  "This Week",      WarningAmber,                       Modifier.weight(1f))
+            StatTile(totalItemCount.toString(),     "Total Items",    MaterialTheme.colorScheme.primary, Modifier.weight(1f))
+            StatTile(expiringTodayCount.toString(), "Expiring Today", MaterialTheme.colorScheme.error,   Modifier.weight(1f))
+            StatTile(expiringWeekCount.toString(),  "This Week",      WarningAmber,                      Modifier.weight(1f))
         }
     }
 }
@@ -663,7 +687,11 @@ private fun AddSensorCard(
 //expiry calendar shortcut card
 
 @Composable
-private fun ExpiryCalendarShortcut(onClick: () -> Unit) {
+private fun ExpiryCalendarShortcut(
+    expiringWeekCount: Int,
+    onClick: () -> Unit,
+) {
+    val noun = if (expiringWeekCount == 1) "item" else "items"
     Surface(
         onClick        = onClick,
         modifier       = Modifier
@@ -708,7 +736,7 @@ private fun ExpiryCalendarShortcut(onClick: () -> Unit) {
                         color = MaterialTheme.colorScheme.onSurface,
                     )
                     Text(
-                        text  = "2 items expiring this week",
+                        text  = "$expiringWeekCount $noun expiring this week",
                         style = MaterialTheme.typography.bodySmall,
                         color = LabelGrey,
                     )
