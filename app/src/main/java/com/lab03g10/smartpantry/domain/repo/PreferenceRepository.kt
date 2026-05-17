@@ -9,11 +9,18 @@ import kotlinx.coroutines.flow.Flow
  * the user already accepted or dismissed.
  */
 interface PreferenceRepository {
+    fun observeIsDarkMode(): Flow<Boolean>
+    suspend fun setDarkMode(enabled: Boolean)
+
+    fun observeNotifyDaysBefore(): Flow<Int>
+    suspend fun setNotifyDaysBefore(days: Int)
 
     /**
      * This gives all dismissed shopping suggestions.
      */
     fun observeDismissedSuggestions(): Flow<Map<String, Long>>
+    fun observeQuietHoursStart(): Flow<Int>
+    suspend fun setQuietHoursStart(hour: Int)
 
     /**
      * This saves the time when a suggestion was dismissed.
@@ -24,4 +31,12 @@ interface PreferenceRepository {
         category: String,
         dismissedAt: Long = System.currentTimeMillis()
     )
+    fun observeQuietHoursEnd(): Flow<Int>
+    suspend fun setQuietHoursEnd(hour: Int)
+
+    fun observeOnboardingCompleted(): Flow<Boolean>
+    suspend fun setOnboardingCompleted(completed: Boolean)
+
+    fun observeUserName(): Flow<String>
+    suspend fun setUserName(name: String)
 }

@@ -50,4 +50,7 @@ class FoodRepositoryImpl @Inject constructor(
 
     override suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long) =
         dao.updateEffectiveExpiry(id, effectiveExpiryDate, System.currentTimeMillis())
+
+    override suspend fun findExpiringBetween(startEpoch: Long, endEpoch: Long): List<FoodItemEntity> =
+        dao.findExpiringBetween(startEpoch, endEpoch)
 }

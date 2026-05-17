@@ -3,6 +3,9 @@ package com.lab03g10.smartpantry
 import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
+import com.lab03g10.smartpantry.notification.ExpiryAlarmScheduler
+import com.lab03g10.smartpantry.notification.NotificationChannels
+import com.lab03g10.smartpantry.worker.ExpiryDigestScheduler
 import com.lab03g10.smartpantry.worker.SensorTickScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
@@ -27,6 +30,8 @@ class SmartPantryApp : Application(), Configuration.Provider {
 
     @Inject lateinit var workerFactory: HiltWorkerFactory
     @Inject lateinit var sensorTickScheduler: SensorTickScheduler
+    @Inject lateinit var expiryAlarmScheduler: ExpiryAlarmScheduler
+    @Inject lateinit var expiryDigestScheduler: ExpiryDigestScheduler
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -36,6 +41,8 @@ class SmartPantryApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
         sensorTickScheduler.schedule()
-        // TODO: Channel creation deferred (Willy Day 6)
+        NotificationChannels.create(this)
+        expiryAlarmScheduler.schedule()
+        expiryDigestScheduler.schedule()
     }
 }

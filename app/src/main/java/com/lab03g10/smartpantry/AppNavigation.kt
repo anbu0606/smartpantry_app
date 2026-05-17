@@ -41,9 +41,12 @@ import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.hilt.navigation.compose.hiltViewModel
+import com.lab03g10.smartpantry.ui.viewmodel.MainViewModel
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -112,10 +115,34 @@ private val bottomBarRoutes: Set<String> = BottomTab.entries.map { it.route }.to
 
 @Composable
 fun AppNavigation() {
-    val navController = rememberNavController()
+    val navController  = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
-    val currentRoute = backStackEntry?.destination?.route
-    val isAuthenticated by remember { mutableStateOf(false) } // TODO(Willy Day 5): replace with authViewModel.authState.collectAsState()
+    val currentRoute   = backStackEntry?.destination?.route
+
+    val mainViewModel         = hiltViewModel<MainViewModel>()
+    val isAuthenticated       by mainViewModel.isAuthenticated.collectAsState()
+    val isOnboardingCompleted by mainViewModel.isOnboardingCompleted.collectAsState()
+
+    // Auth gate: redirect when Firebase auth state changes mid-session (sign-out, token expiry).
+    // Only acts when the user is on the wrong side of the auth boundary; explicit navigation
+    // callbacks (onLoginSuccess, onSignOut) handle the normal user-initiated flows.
+    val unauthenticatedRoutes = remember {
+        setOf(Route.LOGIN, Route.REGISTRATION, Route.FORGOT_PASSWORD)
+    }
+    LaunchedEffect(isAuthenticated) {
+        if (isAuthenticated && currentRoute in unauthenticatedRoutes) {
+            // Route to Onboarding for first-timers, Dashboard for returning users.
+            // isOnboardingCompleted is captured here, after DataStore has loaded.
+            val dest = if (isOnboardingCompleted) Route.DASHBOARD else Route.ONBOARDING
+            navController.navigate(dest) {
+                popUpTo(0) { inclusive = true }
+            }
+        } else if (!isAuthenticated && currentRoute != null && currentRoute !in unauthenticatedRoutes) {
+            navController.navigate(Route.LOGIN) {
+                popUpTo(0) { inclusive = true }
+            }
+        }
+    }
 
     Scaffold(
         bottomBar = {
@@ -153,11 +180,10 @@ fun AppNavigation() {
             }
             composable(Route.REGISTRATION) {
                 RegistrationScreen(
-                    onRegistrationSuccess = {
-                        navController.navigate(Route.ONBOARDING) {
-                            popUpTo(Route.LOGIN) { inclusive = true }
-                        }
-                    },
+                    // Navigation is owned by the auth-gate LaunchedEffect above, which fires
+                    // when isAuthenticated flips to true and routes to Onboarding or Dashboard
+                    // based on isOnboardingCompleted. An explicit callback here would race it.
+                    onRegistrationSuccess = {},
                     onNavigateToLogin     = { navController.popBackStack() },
                 )
             }
@@ -192,7 +218,13 @@ fun AppNavigation() {
                 )
             }
             composable(Route.PROFILE) {
-                ProfileScreen()
+                ProfileScreen(
+                    onSignOut = {
+                        navController.navigate(Route.LOGIN) {
+                            popUpTo(0) { inclusive = true }
+                        }
+                    }
+                )
             }
             composable(
                 route = Route.ADD_EDIT_FOOD,

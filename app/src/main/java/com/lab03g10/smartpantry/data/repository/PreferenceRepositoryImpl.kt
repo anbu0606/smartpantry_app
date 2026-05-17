@@ -1,6 +1,8 @@
 package com.lab03g10.smartpantry.data.repository
 
 import android.content.Context
+import androidx.datastore.core.DataStore
+import androidx.datastore.preferences.core.*
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
@@ -35,6 +37,15 @@ class PreferenceRepositoryImpl @Inject constructor(
          */
         private val SUGGESTION_DISMISSALS =
             stringPreferencesKey("suggestion_dismissals")
+    }
+
+    private object PreferencesKeys {
+        val DARK_MODE = booleanPreferencesKey("dark_mode")
+        val NOTIFY_DAYS_BEFORE = intPreferencesKey("notify_days_before")
+        val QUIET_HOURS_START = intPreferencesKey("quiet_hours_start")
+        val QUIET_HOURS_END = intPreferencesKey("quiet_hours_end")
+        val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
+        val USER_NAME = stringPreferencesKey("user_name")
     }
 
     /*
@@ -122,5 +133,65 @@ class PreferenceRepositoryImpl @Inject constructor(
         }
 
         return textItems.joinToString(";")
+    }
+
+    override fun observeIsDarkMode(): Flow<Boolean> = context.smartPantryDataStore.data.map { preferences ->
+        preferences[PreferencesKeys.DARK_MODE] ?: false
+    }
+
+    override suspend fun setDarkMode(enabled: Boolean) {
+        context.smartPantryDataStore.edit { preferences ->
+            preferences[PreferencesKeys.DARK_MODE] = enabled
+        }
+    }
+
+    override fun observeNotifyDaysBefore(): Flow<Int> = context.smartPantryDataStore.data.map { preferences ->
+        preferences[PreferencesKeys.NOTIFY_DAYS_BEFORE] ?: 3 // Default 3 days
+    }
+
+    override suspend fun setNotifyDaysBefore(days: Int) {
+        context.smartPantryDataStore.edit { preferences ->
+            preferences[PreferencesKeys.NOTIFY_DAYS_BEFORE] = days
+        }
+    }
+
+    override fun observeQuietHoursStart(): Flow<Int> = context.smartPantryDataStore.data.map { preferences ->
+        preferences[PreferencesKeys.QUIET_HOURS_START] ?: 22 // Default 10 PM
+    }
+
+    override suspend fun setQuietHoursStart(hour: Int) {
+        context.smartPantryDataStore.edit { preferences ->
+            preferences[PreferencesKeys.QUIET_HOURS_START] = hour
+        }
+    }
+
+    override fun observeQuietHoursEnd(): Flow<Int> = context.smartPantryDataStore.data.map { preferences ->
+        preferences[PreferencesKeys.QUIET_HOURS_END] ?: 8 // Default 8 AM
+    }
+
+    override suspend fun setQuietHoursEnd(hour: Int) {
+        context.smartPantryDataStore.edit { preferences ->
+            preferences[PreferencesKeys.QUIET_HOURS_END] = hour
+        }
+    }
+
+    override fun observeOnboardingCompleted(): Flow<Boolean> = context.smartPantryDataStore.data.map { preferences ->
+        preferences[PreferencesKeys.ONBOARDING_COMPLETED] ?: false
+    }
+
+    override suspend fun setOnboardingCompleted(completed: Boolean) {
+        context.smartPantryDataStore.edit { preferences ->
+            preferences[PreferencesKeys.ONBOARDING_COMPLETED] = completed
+        }
+    }
+
+    override fun observeUserName(): Flow<String> = context.smartPantryDataStore.data.map { preferences ->
+        preferences[PreferencesKeys.USER_NAME] ?: ""
+    }
+
+    override suspend fun setUserName(name: String) {
+        context.smartPantryDataStore.edit { preferences ->
+            preferences[PreferencesKeys.USER_NAME] = name
+        }
     }
 }

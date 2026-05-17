@@ -28,6 +28,7 @@ import androidx.compose.material.icons.outlined.Email
 import androidx.compose.material.icons.outlined.LockReset
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -39,6 +40,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -52,9 +54,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
-
-// Public composable
+import com.lab03g10.smartpantry.ui.viewmodel.ForgotPasswordViewModel
 
 /**
  * Forgot Password screen for the Smart Pantry app.
@@ -63,24 +65,28 @@ import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
  * 1. Form - user enters email and clicks "Send Reset Link"
  * 2. Success - shows message and "Return to Sign In" button
  *
- * Animation is used when switching between these two states
- *
- * @param onNavigateBack Called when user clicks the back or "Back to Sign In" / "Return to Sign In" option.
+ * @param onNavigateBack Called when user clicks the back or "Return to Sign In" option.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ForgotPasswordScreen(onNavigateBack: () -> Unit) {
+fun ForgotPasswordScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: ForgotPasswordViewModel = hiltViewModel()
+) {
+    var email by remember { mutableStateOf("") }
+    val isLoading by viewModel.isLoading.collectAsState()
+    val isEmailSent by viewModel.isEmailSent.collectAsState()
+    val error by viewModel.error.collectAsState()
 
-    var email     by remember { mutableStateOf("") }
-    var emailSent by remember { mutableStateOf(false) }
-    val isValid   = email.contains("@") && email.contains(".")
+    // Basic client-side validation for the button enable state
+    val isValid = email.contains("@") && email.contains(".")
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = { Text("Reset Password") },
                 navigationIcon = {
-                    IconButton(onClick = onNavigateBack) {
+                    IconButton(onClick = onNavigateBack, enabled = !isLoading) {
                         Icon(
                             imageVector        = Icons.AutoMirrored.Filled.ArrowBack,
                             contentDescription = "Navigate back",
@@ -105,19 +111,17 @@ fun ForgotPasswordScreen(onNavigateBack: () -> Unit) {
         ) {
 
             AnimatedContent(
-                targetState    = emailSent,
+                targetState    = isEmailSent,
                 transitionSpec = { fadeIn() togetherWith fadeOut() },
                 label          = "ForgotPassword_StateTransition",
             ) { sent ->
 
                 if (!sent) {
                     // FORM state
-
                     Column(
                         modifier            = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-
                         Spacer(Modifier.height(40.dp))
 
                         // Icon circle
@@ -177,16 +181,27 @@ fun ForgotPasswordScreen(onNavigateBack: () -> Unit) {
                             ),
                             singleLine = true,
                             shape      = RoundedCornerShape(12.dp),
+                            enabled    = !isLoading,
+                            isError    = error != null
                         )
+
+                        if (error != null) {
+                            Text(
+                                text = error!!,
+                                color = MaterialTheme.colorScheme.error,
+                                style = MaterialTheme.typography.bodySmall,
+                                modifier = Modifier.padding(top = 4.dp, start = 4.dp).align(Alignment.Start)
+                            )
+                        }
 
                         Spacer(Modifier.height(16.dp))
 
                         Button(
-                            onClick  = { if (isValid) emailSent = true },
+                            onClick  = { viewModel.sendResetLink(email) },
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .height(52.dp),
-                            enabled = isValid,
+                            enabled = isValid && !isLoading,
                             shape   = RoundedCornerShape(50),
                             colors  = ButtonDefaults.buttonColors(
                                 containerColor         = MaterialTheme.colorScheme.primary,
@@ -197,12 +212,20 @@ fun ForgotPasswordScreen(onNavigateBack: () -> Unit) {
                             ),
                             contentPadding = PaddingValues(vertical = 14.dp),
                         ) {
-                            Text(
-                                text  = "Send Reset Link",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.Bold,
-                                ),
-                            )
+                            if (isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = MaterialTheme.colorScheme.onPrimary,
+                                    strokeWidth = 2.dp
+                                )
+                            } else {
+                                Text(
+                                    text  = "Send Reset Link",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontWeight = FontWeight.Bold,
+                                    ),
+                                )
+                            }
                         }
 
                         Spacer(Modifier.height(16.dp))
@@ -210,6 +233,7 @@ fun ForgotPasswordScreen(onNavigateBack: () -> Unit) {
                         TextButton(
                             onClick  = onNavigateBack,
                             modifier = Modifier.fillMaxWidth(),
+                            enabled  = !isLoading
                         ) {
                             Text(
                                 text  = "Back to Sign In",
@@ -221,12 +245,10 @@ fun ForgotPasswordScreen(onNavigateBack: () -> Unit) {
 
                 } else {
                     // SUCCESS state
-
                     Column(
                         modifier            = Modifier.fillMaxWidth(),
                         horizontalAlignment = Alignment.CenterHorizontally,
                     ) {
-
                         Spacer(Modifier.height(80.dp))
 
                         // Green checkmark circle
@@ -289,102 +311,6 @@ fun ForgotPasswordScreen(onNavigateBack: () -> Unit) {
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-// Previews
-
-@Preview(name = "Light — Form", showBackground = true, backgroundColor = 0xFFF9F9F9)
-@Composable
-private fun PreviewForgotPasswordLight() {
-    SmartPantryTheme {
-        ForgotPasswordScreen(onNavigateBack = {})
-    }
-}
-
-@Preview(
-    name            = "Dark — Form",
-    showBackground  = true,
-    backgroundColor = 0xFF191C18,
-    uiMode          = UI_MODE_NIGHT_YES,
-)
-@Composable
-private fun PreviewForgotPasswordDark() {
-    SmartPantryTheme(darkTheme = true) {
-        ForgotPasswordScreen(onNavigateBack = {})
-    }
-}
-
-@Preview(name = "Light — Sent", showBackground = true, backgroundColor = 0xFFF9F9F9)
-@Composable
-private fun PreviewForgotPasswordSent() {
-    SmartPantryTheme {
-        Column(
-            modifier            = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-        ) {
-            Spacer(Modifier.height(80.dp))
-
-            Box(
-                modifier = Modifier
-                    .size(80.dp)
-                    .background(
-                        color = Color(0xFFE8F5E9),
-                        shape = CircleShape,
-                    ),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(
-                    imageVector        = Icons.Filled.CheckCircle,
-                    contentDescription = null,
-                    tint               = Color(0xFF2E7D32),
-                    modifier           = Modifier.size(44.dp),
-                )
-            }
-
-            Spacer(Modifier.height(24.dp))
-
-            Text(
-                text      = "Check your email",
-                style     = MaterialTheme.typography.headlineSmall.copy(
-                    fontWeight = FontWeight.SemiBold,
-                ),
-                color     = MaterialTheme.colorScheme.onSurface,
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(Modifier.height(8.dp))
-
-            Text(
-                text      = "We've sent a password reset link to user@example.com",
-                style     = MaterialTheme.typography.bodyMedium,
-                color     = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-            )
-
-            Spacer(Modifier.height(32.dp))
-
-            Button(
-                onClick        = {},
-                modifier       = Modifier
-                    .fillMaxWidth()
-                    .height(52.dp),
-                shape          = RoundedCornerShape(50),
-                colors         = ButtonDefaults.buttonColors(
-                    containerColor = MaterialTheme.colorScheme.primary,
-                ),
-                contentPadding = PaddingValues(vertical = 14.dp),
-            ) {
-                Text(
-                    text  = "Return to Sign In",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                    ),
-                )
             }
         }
     }

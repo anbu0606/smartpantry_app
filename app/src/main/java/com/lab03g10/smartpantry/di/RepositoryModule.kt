@@ -36,5 +36,8 @@ abstract class RepositoryModule {
     abstract fun bindShoppingRepository(impl: ShoppingRepositoryImpl): ShoppingRepository
 
     @Binds @Singleton
+    abstract fun bindAuthRepository(impl: AuthRepositoryImpl): AuthRepository
+
+    @Binds @Singleton
     abstract fun bindPreferenceRepository(impl: PreferenceRepositoryImpl): PreferenceRepository
 }
