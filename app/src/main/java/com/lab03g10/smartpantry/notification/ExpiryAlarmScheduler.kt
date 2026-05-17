@@ -17,8 +17,14 @@ class ExpiryAlarmScheduler @Inject constructor(
     private val alarmManager = context.getSystemService(AlarmManager::class.java)
 
     fun schedule() {
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) return
-        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, nextNineAm(), pendingIntent())
+        val triggerAt = nextNineAm()
+        val pi = pendingIntent()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S && !alarmManager.canScheduleExactAlarms()) {
+            // Exact alarms unavailable (user revoked or device policy) — fall back to inexact.
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
+            return
+        }
+        alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
     }
 
     fun cancel() {
