@@ -19,11 +19,13 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.FlashOff
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Surface
@@ -44,9 +46,11 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 
 private val CameraBg         = Color(0xFF1A1A1A)
@@ -69,10 +73,12 @@ private val scanModes = listOf("Barcode", "Expiry Label")
 @Composable
 fun ScannerScreen(
     onNavigateToAddFood: () -> Unit = {},
-    onNavigateToBarcodeResult: () -> Unit = {},
+    onNavigateToBarcodeResult: (String) -> Unit = {},
     onNavigateBack: () -> Unit = {},
 ) {
     var selectedMode by remember { mutableStateOf("Barcode") }
+    var barcode by remember { mutableStateOf("") }
+    val cleanedBarcode = barcode.filter(Char::isDigit)
 
     Box(
         modifier = Modifier
@@ -152,7 +158,11 @@ fun ScannerScreen(
         )
 
         BottomSheetStrip(
-            onSimulateScan  = onNavigateToBarcodeResult,
+            barcode = barcode,
+            onBarcodeChange = { barcode = it.filter(Char::isDigit) },
+            canLookup = cleanedBarcode.length >= 8,
+            onLookupBarcode = { onNavigateToBarcodeResult(cleanedBarcode) },
+            onSimulateScan  = { onNavigateToBarcodeResult("737628064502") },
             onEnterManually = onNavigateToAddFood,
             modifier        = Modifier.align(Alignment.BottomCenter),
         )
@@ -240,6 +250,10 @@ private fun ScanModeChip(
 
 @Composable
 private fun BottomSheetStrip(
+    barcode: String,
+    onBarcodeChange: (String) -> Unit,
+    canLookup: Boolean,
+    onLookupBarcode: () -> Unit,
     onSimulateScan: () -> Unit,
     onEnterManually: () -> Unit,
     modifier: Modifier = Modifier,
@@ -262,7 +276,7 @@ private fun BottomSheetStrip(
                     .background(SheetHandleColor, CircleShape),
             )
             Text(
-                text      = "Scanning for product information!!!",
+                text      = "Enter a barcode",
                 style     = MaterialTheme.typography.bodyLarge.copy(
                     fontWeight = FontWeight.Medium,
                 ),
@@ -271,11 +285,46 @@ private fun BottomSheetStrip(
             )
 
             Text(
-                text      = "Barcode will auto-fill the food name and nutritional data",
+                text      = "Product details will be loaded from Open Food Facts!",
                 style     = MaterialTheme.typography.bodySmall,
                 color     = SubtitleGrey,
                 textAlign = TextAlign.Center,
             )
+            OutlinedTextField(
+                value = barcode,
+                onValueChange = onBarcodeChange,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Barcode number") },
+                leadingIcon = {
+                    Icon(
+                        imageVector = Icons.Outlined.Search,
+                        contentDescription = null,
+                    )
+                },
+                singleLine = true,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                shape = RoundedCornerShape(12.dp),
+            )
+
+            androidx.compose.material3.Button(
+                onClick = onLookupBarcode,
+                enabled = canLookup,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(48.dp),
+                shape = RoundedCornerShape(12.dp),
+                colors = androidx.compose.material3.ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFF0D631B),
+                ),
+            ) {
+                Text(
+                    text = "Look Up Barcode",
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontWeight = FontWeight.SemiBold,
+                    ),
+                    color = Color.White,
+                )
+            }
 
             // simulate a successful scan prototype design
             androidx.compose.material3.Button(
@@ -289,7 +338,7 @@ private fun BottomSheetStrip(
                 ),
             ) {
                 Text(
-                    text  = "Simulate Scan Result",
+                    text  = "Use Demo Barcode",
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontWeight = FontWeight.SemiBold,
                     ),
@@ -314,7 +363,7 @@ private fun BottomSheetStrip(
                 ),
             ) {
                 Text(
-                    text  = "Enter Manually Instead",
+                    text  = "Add Item Without Barcode",
                     style = MaterialTheme.typography.labelLarge.copy(
                         fontWeight = FontWeight.SemiBold,
                     ),

@@ -18,10 +18,14 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.outlined.ErrorOutline
+import androidx.compose.material.icons.outlined.Inventory
 import androidx.compose.material.icons.outlined.LocalDrink
 import androidx.compose.material3.Button
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -35,15 +39,22 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import coil.compose.AsyncImage
+import com.lab03g10.smartpantry.domain.model.BarcodeProduct
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import com.lab03g10.smartpantry.ui.viewmodel.BarcodeErrorKind
+import com.lab03g10.smartpantry.ui.viewmodel.BarcodeScanResultViewModel
 
 private val SuccessGreen = Color(0xFF2E7D32)
 private val SuccessBg    = Color(0xFFE8F5E9)
@@ -51,9 +62,11 @@ private val SuccessBg    = Color(0xFFE8F5E9)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun BarcodeScanResultScreen(
-    onNavigateToAddFood: () -> Unit,
+    onNavigateToAddFood: (BarcodeProduct) -> Unit,
     onNavigateBack: () -> Unit,
+    viewModel: BarcodeScanResultViewModel = hiltViewModel(),
 ) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
     Scaffold(
         topBar = {
             TopAppBar(
@@ -94,10 +107,139 @@ fun BarcodeScanResultScreen(
 
             Spacer(Modifier.height(32.dp))
 
-            // Success indicator
-            Box(
-                modifier         = Modifier
-                    .size(56.dp),
+            when {
+                state.isLoading -> LoadingResult(barcode = state.barcode)
+                state.errorMessage != null -> ErrorResult(
+                    barcode = state.barcode,
+                    kind    = state.errorKind ?: BarcodeErrorKind.UNKNOWN,
+                    message = state.errorMessage.orEmpty(),
+                    onRetry = viewModel::lookup,
+                    onManualAdd = onNavigateBack,
+                )
+                state.product != null -> ProductResult(
+                    product = state.product!!,
+                    onAddToInventory = { onNavigateToAddFood(state.product!!) },
+                    onScanAnother = onNavigateBack,
+                )
+            }
+
+            Spacer(Modifier.height(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun LoadingResult(barcode: String) {
+    CircularProgressIndicator(color = SuccessGreen)
+    Spacer(Modifier.height(16.dp))
+    Text(
+        text = "Looking up product...",
+        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(4.dp))
+    Text(
+        text = barcode,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
+}
+
+@Composable
+private fun ErrorResult(
+    barcode: String,
+    kind: BarcodeErrorKind,
+    message: String,
+    onRetry: () -> Unit,
+    onManualAdd: () -> Unit,
+) {
+    // Title comes from the classified kind, supporting text comes from the
+    // VM's already-shaped copy. Primary CTA also depends on kind: "Try Again"
+    // makes sense for network failures, but for "not in database" the right
+    // next step is to enter details manually.
+    val title = when (kind) {
+        BarcodeErrorKind.NOT_IN_DATABASE -> "Product not in database"
+        BarcodeErrorKind.NETWORK         -> "No internet"
+        BarcodeErrorKind.INVALID         -> "Invalid barcode"
+        BarcodeErrorKind.UNKNOWN         -> "Couldn't load product"
+    }
+    val primaryRetry = kind != BarcodeErrorKind.NOT_IN_DATABASE
+
+    Icon(
+        imageVector = Icons.Outlined.ErrorOutline,
+        contentDescription = null,
+        tint = MaterialTheme.colorScheme.error,
+        modifier = Modifier.size(48.dp),
+    )
+    Spacer(Modifier.height(16.dp))
+    Text(
+        text = title,
+        style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(4.dp))
+    Text(
+        text = message,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(2.dp))
+    Text(
+        text = barcode,
+        style = MaterialTheme.typography.labelSmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(24.dp))
+
+    if (primaryRetry) {
+        Button(
+            onClick  = onRetry,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+        ) {
+            Text("Try Again")
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onManualAdd,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+            border   = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        ) {
+            Text("Add Details Manually")
+        }
+    } else {
+        // NOT_IN_DATABASE: retry won't help — promote manual-add to the primary.
+        Button(
+            onClick  = onManualAdd,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+        ) {
+            Text("Add Details Manually")
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onRetry,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+            border   = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        ) {
+            Text("Try Again")
+        }
+    }
+}
+
+@Composable
+private fun ProductResult(
+    product: BarcodeProduct,
+    onAddToInventory: () -> Unit,
+    onScanAnother: () -> Unit,
+) {
+    Box(
+        modifier = Modifier.size(56.dp),
                 contentAlignment = Alignment.Center,
             ) {
                 Surface(
@@ -116,7 +258,7 @@ fun BarcodeScanResultScreen(
             Spacer(Modifier.height(16.dp))
 
             Text(
-                text      = "Barcode Recognised",
+                text      = if (product.fromLocalInventory) "Found in Inventory" else "Barcode Recognised",
                 style     = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.SemiBold,
                 ),
@@ -127,7 +269,7 @@ fun BarcodeScanResultScreen(
             Spacer(Modifier.height(4.dp))
 
             Text(
-                text      = "EAN-13 · 5 901234 123457",
+                text      = product.barcode,
                 style     = MaterialTheme.typography.labelSmall,
                 color     = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -136,7 +278,6 @@ fun BarcodeScanResultScreen(
             Spacer(Modifier.height(24.dp))
 
 
-            //hardcoded Product result data
             ElevatedCard(
                 modifier  = Modifier.fillMaxWidth(),
                 shape     = RoundedCornerShape(16.dp),
@@ -152,35 +293,21 @@ fun BarcodeScanResultScreen(
                     horizontalArrangement = Arrangement.spacedBy(16.dp),
                     verticalAlignment     = Alignment.CenterVertically,
                 ) {
-                    Box(
-                        modifier         = Modifier.size(56.dp),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Surface(
-                            shape    = RoundedCornerShape(12.dp),
-                            color    = MaterialTheme.colorScheme.secondaryContainer,
-                            modifier = Modifier.size(56.dp),
-                        ) {}
-                        Icon(
-                            imageVector        = Icons.Outlined.LocalDrink,
-                            contentDescription = null,
-                            tint               = MaterialTheme.colorScheme.onSecondaryContainer,
-                            modifier           = Modifier.size(28.dp),
-                        )
-                    }
+                    ProductImage(product.imageUrl)
 
                     Column(
                         verticalArrangement = Arrangement.spacedBy(4.dp),
+                        modifier = Modifier.weight(1f),
                     ) {
                         Text(
-                            text  = "Full Cream Milk",
+                            text  = product.name,
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
                             ),
                             color = MaterialTheme.colorScheme.onSurface,
                         )
                         Text(
-                            text  = "Brand X · Dairy",
+                            text  = listOfNotNull(product.brand, product.category).joinToString(" - "),
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
@@ -189,7 +316,7 @@ fun BarcodeScanResultScreen(
                             color = SuccessBg,
                         ) {
                             Text(
-                                text     = "Suggested expiry: 7 days",
+                                text     = if (product.fromLocalInventory) "Cached from pantry" else "Loaded from Open Food Facts",
                                 modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
                                 style    = MaterialTheme.typography.labelSmall.copy(
                                     fontWeight = FontWeight.Medium,
@@ -213,7 +340,7 @@ fun BarcodeScanResultScreen(
             Spacer(Modifier.height(24.dp))
 
             Button(
-                onClick  = onNavigateToAddFood,
+                onClick  = onAddToInventory,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -230,7 +357,7 @@ fun BarcodeScanResultScreen(
             Spacer(Modifier.height(8.dp))
 
             OutlinedButton(
-                onClick  = onNavigateBack,
+                onClick  = onScanAnother,
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(52.dp),
@@ -246,20 +373,31 @@ fun BarcodeScanResultScreen(
                 )
             }
 
-            Spacer(Modifier.height(8.dp))
+}
 
-            TextButton(
-                onClick  = onNavigateToAddFood,
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                Text(
-                    text  = "Not the right product? Edit manually",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+@Composable
+private fun ProductImage(imageUrl: String?) {
+    Surface(
+        shape = RoundedCornerShape(12.dp),
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        modifier = Modifier.size(64.dp),
+    ) {
+        if (imageUrl != null) {
+            AsyncImage(
+                model = imageUrl,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize(),
+            )
+        } else {
+            Box(contentAlignment = Alignment.Center) {
+                Icon(
+                    imageVector = Icons.Outlined.LocalDrink,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.onSecondaryContainer,
+                    modifier = Modifier.size(28.dp),
                 )
             }
-
-            Spacer(Modifier.height(16.dp))
         }
     }
 }
@@ -268,10 +406,7 @@ fun BarcodeScanResultScreen(
 @Composable
 private fun PreviewBarcodeScanResultLight() {
     SmartPantryTheme {
-        BarcodeScanResultScreen(
-            onNavigateToAddFood = {},
-            onNavigateBack      = {},
-        )
+        Text("Barcode result preview uses live API state at runtime.")
     }
 }
 
@@ -284,9 +419,6 @@ private fun PreviewBarcodeScanResultLight() {
 @Composable
 private fun PreviewBarcodeScanResultDark() {
     SmartPantryTheme(darkTheme = true) {
-        BarcodeScanResultScreen(
-            onNavigateToAddFood = {},
-            onNavigateBack      = {},
-        )
+        Text("Barcode result preview uses live API state at runtime.")
     }
 }

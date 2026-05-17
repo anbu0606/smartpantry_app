@@ -49,11 +49,11 @@ import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
 import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.util.daysUntil
 import com.lab03g10.smartpantry.ui.viewmodel.FoodDetailViewModel
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import java.util.TimeZone
 import java.util.concurrent.TimeUnit
 
 
@@ -71,9 +71,10 @@ private val ReasonOptions = listOf(
     ReasonOption("OTHER",   "Other",   "Some other reason"),
 )
 
-private val detailDateFmt = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH).apply {
-    timeZone = TimeZone.getTimeZone("UTC")
-}
+// Display formatter — no explicit TimeZone, so SimpleDateFormat falls back to
+// the JVM default (device-local on Android). User-facing dates should read
+// in wall-clock time, not UTC. See gap-closure-checklist §10.2.
+private val detailDateFmt = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun FoodDetailScreen(
@@ -452,13 +453,6 @@ private fun CategoryChip(label: String) {
             color = MaterialTheme.colorScheme.onSecondaryContainer,
         )
     }
-}
-
-private fun daysUntil(expiryMillis: Long): Int {
-    return TimeUnit.MILLISECONDS
-        .toDays(expiryMillis - System.currentTimeMillis())
-        .toInt()
-        .coerceAtLeast(0)
 }
 
 @Preview(name = "Light", showBackground = true, backgroundColor = 0xFFF9F9F9)

@@ -10,8 +10,6 @@ import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
-import java.util.Locale
-import java.util.TimeZone
 import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -30,6 +28,7 @@ data class AddEditFoodUiState(
     val quantity: String = "",
     val unit: String = "g",
     val barcode: String = "",
+    val imageUrl: String? = null,
     val purchaseDate: Long? = todayStartMillis(),
     val nominalExpiryDate: Long? = null,
     val storageLocationId: String? = null,
@@ -72,7 +71,21 @@ class AddEditFoodViewModel @Inject constructor(
 ) : ViewModel() {
 
     private val foodId: String? = savedStateHandle["foodId"]
-    private val form = MutableStateFlow(AddEditFoodUiState(foodId = foodId))
+    private val prefillName: String? = savedStateHandle["name"]
+    private val prefillCategory: String? = savedStateHandle["category"]
+    private val prefillBarcode: String? = savedStateHandle["barcode"]
+    private val prefillImageUrl: String? = savedStateHandle["imageUrl"]
+    private val form = MutableStateFlow(
+        AddEditFoodUiState(
+            foodId = foodId,
+            name = prefillName.orEmpty(),
+            category = prefillCategory?.takeIf { it.isNotBlank() } ?: "Dairy",
+            barcode = prefillBarcode.orEmpty(),
+            imageUrl = prefillImageUrl?.takeIf { it.isNotBlank() },
+            quantity = if (prefillName.isNullOrBlank()) "" else "1",
+            unit = if (prefillName.isNullOrBlank()) "g" else "pcs",
+        ),
+    )
 
     val state: StateFlow<AddEditFoodUiState> = combine(
         form,
@@ -96,6 +109,7 @@ class AddEditFoodViewModel @Inject constructor(
                         quantity = item.quantity,
                         unit = item.unit,
                         barcode = item.barcode.orEmpty(),
+                        imageUrl = item.imageUrl,
                         purchaseDate = item.purchaseDate,
                         nominalExpiryDate = item.nominalExpiryDate,
                         storageLocationId = item.storageLocationId,
@@ -138,12 +152,24 @@ class AddEditFoodViewModel @Inject constructor(
                 quantity = current.quantity.trim(),
                 unit = current.unit,
                 barcode = current.barcode.trim().takeIf { it.isNotBlank() },
-                imageUrl = existing?.imageUrl,
+                imageUrl = existing?.imageUrl ?: current.imageUrl,
                 purchaseDate = current.purchaseDate ?: now,
                 nominalExpiryDate = current.nominalExpiryDate ?: now,
-                effectiveExpiryDate = existing?.effectiveExpiryDate
-                    ?.takeIf { current.isEditMode }
-                    ?: (current.nominalExpiryDate ?: now),
+                // Three-case fix for the regression introduced in a00483a:
+                //   A — add mode: nothing to preserve, start from nominal.
+                //   B — edit mode AND user changed nominalExpiryDate: their explicit
+                //       edit takes precedence; ShelfLifeRecalcWorker will re-adjust
+                //       on the next tick.
+                //   C — edit mode but expiry untouched: preserve the worker's
+                //       computed effective value so context-aware recalculation
+                //       isn't silently undone by a no-op edit-save.
+                effectiveExpiryDate = when {
+                    !current.isEditMode -> current.nominalExpiryDate ?: now
+                    current.nominalExpiryDate != null
+                        && current.nominalExpiryDate != existing?.nominalExpiryDate ->
+                            current.nominalExpiryDate
+                    else -> existing?.effectiveExpiryDate ?: current.nominalExpiryDate ?: now
+                },
                 storageLocationId = current.storageLocationId,
                 notes = current.notes.trim().takeIf { it.isNotBlank() },
                 createdAt = existing?.createdAt ?: now,
@@ -157,8 +183,15 @@ class AddEditFoodViewModel @Inject constructor(
     }
 }
 
+/**
+ * Epoch millis for **local** midnight today. Local — not UTC — because
+ * `purchaseDate` and the "expiry in the past" validator are user-facing
+ * concepts tied to the user's wall-clock day. UTC would shift the boundary
+ * by up to 14 h, so an 11 pm AEST add could record purchaseDate = tomorrow.
+ * See gap-closure-checklist §10.2 for the project-wide policy.
+ */
 private fun todayStartMillis(): Long {
-    val calendar = Calendar.getInstance(TimeZone.getTimeZone("UTC"), Locale.ENGLISH)
+    val calendar = Calendar.getInstance()    // default TimeZone = device-local
     calendar.set(Calendar.HOUR_OF_DAY, 0)
     calendar.set(Calendar.MINUTE, 0)
     calendar.set(Calendar.SECOND, 0)

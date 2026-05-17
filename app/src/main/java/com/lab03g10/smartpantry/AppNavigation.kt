@@ -1,5 +1,6 @@
 package com.lab03g10.smartpantry
 
+import android.net.Uri
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -7,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import com.lab03g10.smartpantry.ui.screens.AddEditFoodScreen
 import com.lab03g10.smartpantry.ui.screens.AddSensorScreen
+import com.lab03g10.smartpantry.ui.screens.AnalyticsScreen
 import com.lab03g10.smartpantry.ui.screens.AnalyticsRoute
 import com.lab03g10.smartpantry.ui.screens.BarcodeScanResultScreen
 import com.lab03g10.smartpantry.ui.screens.DashboardScreen
@@ -23,8 +25,8 @@ import com.lab03g10.smartpantry.ui.screens.ProfileScreen
 import com.lab03g10.smartpantry.ui.screens.RegistrationScreen
 import com.lab03g10.smartpantry.ui.screens.ScannerScreen
 import com.lab03g10.smartpantry.ui.screens.SensorDetailScreen
-import com.lab03g10.smartpantry.ui.screens.ShoppingListScreen
-import com.lab03g10.smartpantry.ui.screens.WasteLogScreen
+import com.lab03g10.smartpantry.ui.screens.ShoppingListRoute
+import com.lab03g10.smartpantry.ui.screens.WasteLogRoute
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.Home
@@ -56,6 +58,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.lab03g10.smartpantry.domain.model.BarcodeProduct
 
 
 private object Route {
@@ -71,7 +74,7 @@ private object Route {
     const val ADD_SENSOR           = "add_sensor"
     const val NOTIFICATIONS        = "notifications"
     const val WASTE_LOG            = "waste_log"
-    const val BARCODE_SCAN_RESULT  = "barcode_scan_result"
+    const val BARCODE_SCAN_RESULT  = "barcode_scan_result/{barcode}"
     const val EXPIRY_CALENDAR      = "expiry_calendar"
     const val FORGOT_PASSWORD      = "forgot_password"
     const val ONBOARDING           = "onboarding"
@@ -79,13 +82,19 @@ private object Route {
     const val FOOD_DETAIL    = "food_detail/{foodId}"
     const val EDIT_SENSOR    = "edit_sensor/{sensorId}"
     const val SENSOR_DETAIL  = "sensor_detail/{sensorId}"
-    const val ADD_EDIT_FOOD  = "add_edit_food?foodId={foodId}"
+    const val ADD_EDIT_FOOD  = "add_edit_food?foodId={foodId}&name={name}&category={category}&barcode={barcode}&imageUrl={imageUrl}"
 
     fun foodDetail(id: String)   = "food_detail/$id"
     fun editSensor(id: String)   = "edit_sensor/$id"
     fun sensorDetail(id: String) = "sensor_detail/$id"
     fun addFood()                = "add_edit_food"
     fun editFood(id: String)     = "add_edit_food?foodId=$id"
+    fun barcodeResult(barcode: String) = "barcode_scan_result/${Uri.encode(barcode)}"
+    fun addFoodFromBarcode(product: BarcodeProduct): String =
+        "add_edit_food?name=${Uri.encode(product.name)}" +
+                "&category=${Uri.encode(product.category)}" +
+                "&barcode=${Uri.encode(product.barcode)}" +
+                "&imageUrl=${Uri.encode(product.imageUrl.orEmpty())}"
 }
 
 //Bottom navigation tabs
@@ -198,13 +207,13 @@ fun AppNavigation() {
             }
             composable(Route.SCANNER) {
                 ScannerScreen(
-                    onNavigateToAddFood       = { navController.navigate(Route.ADD_EDIT_FOOD) },
-                    onNavigateToBarcodeResult = { navController.navigate(Route.BARCODE_SCAN_RESULT) },
+                    onNavigateToAddFood       = { navController.navigate(Route.addFood()) },
+                    onNavigateToBarcodeResult = { barcode -> navController.navigate(Route.barcodeResult(barcode)) },
                     onNavigateBack            = { navController.popBackStack() },
                 )
             }
             composable(Route.ANALYTICS) {
-                AnalyticsRoute(
+                AnalyticsScreen(
                     onNavigateToWasteLog = { navController.navigate(Route.WASTE_LOG) },
                 )
             }
@@ -223,7 +232,23 @@ fun AppNavigation() {
                     type = NavType.StringType
                     nullable = true
                     defaultValue = null
-                })
+                }, navArgument("name") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }, navArgument("category") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }, navArgument("barcode") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }, navArgument("imageUrl") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                }),
             ) { backStackEntry ->
                 val foodId = backStackEntry.arguments?.getString("foodId")
                 AddEditFoodScreen(
@@ -234,11 +259,15 @@ fun AppNavigation() {
             composable(Route.STORAGE_MONITOR) {
                 StorageMonitorScreen(
                     onNavigateBack           = { navController.popBackStack() },
-                    onNavigateToSensorDetail = { navController.navigate(Route.SENSOR_DETAIL) },
+                    onNavigateToSensorDetail = { sensorId ->
+                        navController.navigate(Route.sensorDetail(sensorId))
+                    }
                 )
             }
             composable(Route.SHOPPING_LIST) {
-                ShoppingListScreen(onNavigateBack = { navController.popBackStack() })
+                ShoppingListRoute(
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
             composable(Route.ADD_SENSOR) {
                 AddSensorScreen(onNavigateBack = { navController.popBackStack() })
@@ -258,11 +287,16 @@ fun AppNavigation() {
                 NotificationsScreen(onNavigateBack = { navController.popBackStack() })
             }
             composable(Route.WASTE_LOG) {
-                WasteLogScreen(onNavigateBack = { navController.popBackStack() })
+                WasteLogRoute(
+                    onNavigateBack = { navController.popBackStack() },
+                )
             }
-            composable(Route.BARCODE_SCAN_RESULT) {
+            composable(
+                route = Route.BARCODE_SCAN_RESULT,
+                arguments = listOf(navArgument("barcode") { type = NavType.StringType }),
+            ) {
                 BarcodeScanResultScreen(
-                    onNavigateToAddFood = { navController.navigate(Route.ADD_EDIT_FOOD) },
+                    onNavigateToAddFood = { product -> navController.navigate(Route.addFoodFromBarcode(product)) },
                     onNavigateBack      = { navController.popBackStack() },
                 )
             }

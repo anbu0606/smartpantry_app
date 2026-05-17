@@ -7,6 +7,9 @@ import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import javax.inject.Singleton
+import com.lab03g10.smartpantry.data.repository.PreferenceRepositoryImpl
+import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
+
 
 /**
  * @(#) RepositoryModule.kt 1.0 2026-05-10
