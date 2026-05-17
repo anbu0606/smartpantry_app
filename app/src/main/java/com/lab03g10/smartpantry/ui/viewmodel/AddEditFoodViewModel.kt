@@ -157,7 +157,21 @@ class AddEditFoodViewModel @Inject constructor(
                 imageUrl = existing?.imageUrl ?: current.imageUrl,
                 purchaseDate = current.purchaseDate ?: now,
                 nominalExpiryDate = current.nominalExpiryDate ?: now,
-                effectiveExpiryDate = current.nominalExpiryDate ?: existing?.effectiveExpiryDate ?: now,
+                // Three-case fix for the regression introduced in a00483a:
+                //   A — add mode: nothing to preserve, start from nominal.
+                //   B — edit mode AND user changed nominalExpiryDate: their explicit
+                //       edit takes precedence; ShelfLifeRecalcWorker will re-adjust
+                //       on the next tick.
+                //   C — edit mode but expiry untouched: preserve the worker's
+                //       computed effective value so context-aware recalculation
+                //       isn't silently undone by a no-op edit-save.
+                effectiveExpiryDate = when {
+                    !current.isEditMode -> current.nominalExpiryDate ?: now
+                    current.nominalExpiryDate != null
+                        && current.nominalExpiryDate != existing?.nominalExpiryDate ->
+                            current.nominalExpiryDate
+                    else -> existing?.effectiveExpiryDate ?: current.nominalExpiryDate ?: now
+                },
                 storageLocationId = current.storageLocationId,
                 notes = current.notes.trim().takeIf { it.isNotBlank() },
                 createdAt = existing?.createdAt ?: now,

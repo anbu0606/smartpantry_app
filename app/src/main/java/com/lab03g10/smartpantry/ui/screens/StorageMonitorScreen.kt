@@ -57,6 +57,7 @@ private val ThresholdOrange = Color(0xFFF57F17)
 private val GridLine       = Color(0xFFE0E0E0)
 
 private data class LocationConfig(
+    val sensorId: String,
     val name: String,
     val emoji: String,
     val currentTemp: Float,
@@ -76,6 +77,7 @@ private data class LocationConfig(
 
 private val locations = listOf(
     LocationConfig(
+        sensorId               = "sensor-fridge",
         name                   = "Fridge",
         emoji                  = "🧊",
         currentTemp            = 4.2f,
@@ -93,6 +95,7 @@ private val locations = listOf(
         chartMaxTemp           = 10.0f,
     ),
     LocationConfig(
+        sensorId               = "sensor-pantry",
         name                   = "Pantry",
         emoji                  = "🌡",
         currentTemp            = 26.5f,
@@ -110,6 +113,7 @@ private val locations = listOf(
         chartMaxTemp           = 35.0f,
     ),
     LocationConfig(
+        sensorId               = "sensor-cupboard",
         name                   = "Cupboard",
         emoji                  = "🚪",
         currentTemp            = 21.0f,
@@ -141,7 +145,7 @@ private val metricTabs = listOf("🌡 Temperature", "💧 Humidity", "☀ Light"
 @Composable
 fun StorageMonitorScreen(
     onNavigateBack: () -> Unit,
-    onNavigateToSensorDetail: () -> Unit = {},
+    onNavigateToSensorDetail: (String) -> Unit = {},
 ) {
     var selectedTab       by remember { mutableIntStateOf(0) }
     var selectedMetricTab by remember { mutableIntStateOf(0) }
@@ -167,7 +171,7 @@ fun StorageMonitorScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = onNavigateToSensorDetail) {
+                    IconButton(onClick = { onNavigateToSensorDetail(locations[selectedTab].sensorId) }) {
                         Icon(
                             imageVector        = Icons.Outlined.Settings,
                             contentDescription = "Sensor settings",
