@@ -25,6 +25,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.CalendarToday
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 import com.lab03g10.smartpantry.ui.viewmodel.DashboardViewModel
@@ -435,18 +437,26 @@ private fun UseTodaySection(
             }
         }
 
-        LazyRow(
-            contentPadding        = PaddingValues(horizontal = 16.dp),
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            items(urgencyItems) { item ->
-                UrgencyCard(
-                    emoji      = item.emoji,
-                    name       = item.name,
-                    badge      = item.badge,
-                    badgeColor = if (item.isErrorBadge) MaterialTheme.colorScheme.error
-                                 else WarningAmber,
+        if (urgencyItems.isEmpty()) {
+            EmptyState(
+                icon           = Icons.Outlined.CheckCircle,
+                title          = "Nothing to use today 🎉",
+                compact = true,
                 )
+        } else {
+            LazyRow(
+                contentPadding        = PaddingValues(horizontal = 16.dp),
+                horizontalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                items(urgencyItems) { item ->
+                    UrgencyCard(
+                        emoji      = item.emoji,
+                        name       = item.name,
+                        badge      = item.badge,
+                        badgeColor = if (item.isErrorBadge) MaterialTheme.colorScheme.error
+                                     else WarningAmber,
+                    )
+                }
             }
         }
     }

@@ -18,6 +18,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Schedule
@@ -43,6 +44,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 
 // Design tokens
@@ -191,6 +193,20 @@ fun NotificationsScreen(onNavigateBack: () -> Unit) {
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
+        // Forward-compat: once Abinaya replaces the hardcoded lists with VM
+        // state, an empty inbox renders the "all caught up" hint instead of
+        // three orphan sticky headers.
+        val allEmpty = todayNotifs.isEmpty() && yesterdayNotifs.isEmpty() && thisWeekNotifs.isEmpty()
+        if (allEmpty) {
+            EmptyState(
+                icon           = Icons.Outlined.CheckCircle,
+                title          = "All caught up",
+                supportingText = "New alerts about temperature, expiry, or low stock will appear here.",
+                modifier       = Modifier.padding(innerPadding),
+            )
+            return@Scaffold
+        }
+
         LazyColumn(
             modifier       = Modifier
                 .fillMaxSize()

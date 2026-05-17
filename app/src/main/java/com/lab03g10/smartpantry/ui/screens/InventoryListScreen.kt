@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.FilterList
+import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FloatingActionButton
@@ -46,6 +47,7 @@ import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.FoodItemCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 
@@ -155,6 +157,21 @@ fun InventoryListScreen(
                 }
             }
 
+            // Distinguish "no items in the pantry at all" from "filter/search hides everything".
+            val emptyTitle = when {
+                state.searchQuery.isNotBlank() -> "No matches for \"${state.searchQuery}\""
+                state.selectedCategory != "All" -> "No ${state.selectedCategory.lowercase()} items"
+                else -> "Your pantry is empty"
+            }
+            val emptySupporting = when {
+                state.searchQuery.isNotBlank() ->
+                    "Try a different search or clear the search box."
+                state.selectedCategory != "All" ->
+                    "Switch to All or tap + to add ${state.selectedCategory.lowercase()}."
+                else ->
+                    "Tap + to add your first food item, or scan a barcode from the Scanner tab."
+            }
+
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(
@@ -164,6 +181,15 @@ fun InventoryListScreen(
                 ),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                if (state.items.isEmpty()) {
+                    item {
+                        EmptyState(
+                            icon           = Icons.Outlined.Inventory2,
+                            title          = emptyTitle,
+                            supportingText = emptySupporting,
+                        )
+                    }
+                }
                 items(
                     items = state.items,
                     key = { it.id },

@@ -53,6 +53,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import coil.compose.AsyncImage
 import com.lab03g10.smartpantry.domain.model.BarcodeProduct
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.BarcodeErrorKind
 import com.lab03g10.smartpantry.ui.viewmodel.BarcodeScanResultViewModel
 
 private val SuccessGreen = Color(0xFF2E7D32)
@@ -110,6 +111,7 @@ fun BarcodeScanResultScreen(
                 state.isLoading -> LoadingResult(barcode = state.barcode)
                 state.errorMessage != null -> ErrorResult(
                     barcode = state.barcode,
+                    kind    = state.errorKind ?: BarcodeErrorKind.UNKNOWN,
                     message = state.errorMessage.orEmpty(),
                     onRetry = viewModel::lookup,
                     onManualAdd = onNavigateBack,
@@ -147,10 +149,23 @@ private fun LoadingResult(barcode: String) {
 @Composable
 private fun ErrorResult(
     barcode: String,
+    kind: BarcodeErrorKind,
     message: String,
     onRetry: () -> Unit,
     onManualAdd: () -> Unit,
 ) {
+    // Title comes from the classified kind, supporting text comes from the
+    // VM's already-shaped copy. Primary CTA also depends on kind: "Try Again"
+    // makes sense for network failures, but for "not in database" the right
+    // next step is to enter details manually.
+    val title = when (kind) {
+        BarcodeErrorKind.NOT_IN_DATABASE -> "Product not in database"
+        BarcodeErrorKind.NETWORK         -> "No internet"
+        BarcodeErrorKind.INVALID         -> "Invalid barcode"
+        BarcodeErrorKind.UNKNOWN         -> "Couldn't load product"
+    }
+    val primaryRetry = kind != BarcodeErrorKind.NOT_IN_DATABASE
+
     Icon(
         imageVector = Icons.Outlined.ErrorOutline,
         contentDescription = null,
@@ -159,37 +174,61 @@ private fun ErrorResult(
     )
     Spacer(Modifier.height(16.dp))
     Text(
-        text = "Product not found",
+        text = title,
         style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
         textAlign = TextAlign.Center,
     )
     Spacer(Modifier.height(4.dp))
     Text(
-        text = "$barcode - $message",
-        style = MaterialTheme.typography.bodySmall,
+        text = message,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+    )
+    Spacer(Modifier.height(2.dp))
+    Text(
+        text = barcode,
+        style = MaterialTheme.typography.labelSmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
     )
     Spacer(Modifier.height(24.dp))
-    Button(
-        onClick = onRetry,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp),
-        shape = RoundedCornerShape(50),
-    ) {
-        Text("Try Again")
-    }
-    Spacer(Modifier.height(8.dp))
-    OutlinedButton(
-        onClick = onManualAdd,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(52.dp),
-        shape = RoundedCornerShape(50),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
-    ) {
-        Text("Enter Different Barcode")
+
+    if (primaryRetry) {
+        Button(
+            onClick  = onRetry,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+        ) {
+            Text("Try Again")
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onManualAdd,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+            border   = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        ) {
+            Text("Add Details Manually")
+        }
+    } else {
+        // NOT_IN_DATABASE: retry won't help — promote manual-add to the primary.
+        Button(
+            onClick  = onManualAdd,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+        ) {
+            Text("Add Details Manually")
+        }
+        Spacer(Modifier.height(8.dp))
+        OutlinedButton(
+            onClick = onRetry,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape    = RoundedCornerShape(50),
+            border   = BorderStroke(1.dp, MaterialTheme.colorScheme.primary),
+        ) {
+            Text("Try Again")
+        }
     }
 }
 
