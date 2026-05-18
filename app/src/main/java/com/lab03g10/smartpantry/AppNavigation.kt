@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import com.lab03g10.smartpantry.ui.screens.AddEditFoodScreen
 import com.lab03g10.smartpantry.ui.screens.AddSensorScreen
-import com.lab03g10.smartpantry.ui.screens.AnalyticsScreen
 import com.lab03g10.smartpantry.ui.screens.AnalyticsRoute
 import com.lab03g10.smartpantry.ui.screens.BarcodeScanResultScreen
 import com.lab03g10.smartpantry.ui.screens.DashboardScreen
@@ -235,7 +234,7 @@ fun AppNavigation() {
                 )
             }
             composable(Route.ANALYTICS) {
-                AnalyticsScreen(
+                AnalyticsRoute(
                     onNavigateToWasteLog = { navController.navigate(Route.WASTE_LOG) },
                 )
             }
