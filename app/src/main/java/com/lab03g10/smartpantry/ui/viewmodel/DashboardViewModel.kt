@@ -4,9 +4,12 @@ package com.lab03g10.smartpantry.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
+import com.lab03g10.smartpantry.domain.repo.AuthRepository
 import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.NotificationRepository
+import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
+import com.lab03g10.smartpantry.worker.SensorTickScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject
@@ -53,7 +56,50 @@ class DashboardViewModel @Inject constructor(
     private val foodRepository: FoodRepository,
     private val sensorRepository: SensorRepository,
     private val notificationRepository: NotificationRepository,
+    private val sensorTickScheduler: SensorTickScheduler,
+    authRepository: AuthRepository,
+    preferenceRepository: PreferenceRepository,
 ) : ViewModel() {
+
+    /**
+     * Debug-only: enqueues a one-shot SensorTickWorker so demo + manual
+     * verification don't have to wait the 15-minute periodic interval.
+     * UI entry point is gated on BuildConfig.DEBUG (see DashboardScreen).
+     */
+    fun triggerSensorTickNow() {
+        sensorTickScheduler.triggerOnce()
+    }
+
+    /**
+     * First letter shown on the Dashboard top-bar avatar. Source order:
+     *   1. Firebase account displayName (set at sign-up via
+     *      `UserProfileChangeRequest.setDisplayName` in AuthRepositoryImpl)
+     *   2. Firebase account email (first letter)
+     *   3. PreferenceRepository.observeUserName as a last-ditch fallback
+     *   4. "?" placeholder while everything is still null/blank
+     *
+     * Why Firebase before preference: DataStore preferences are stored
+     * **app-wide**, not per-account, so signing out as user A and signing
+     * back in as user B leaves A's preferred name in DataStore. The avatar
+     * represents "who is currently signed in", so it has to follow Firebase
+     * (which IS per-account) — otherwise the new user sees the previous
+     * user's initial after a sign-in switch.
+     *
+     * Kept as a sibling StateFlow rather than folded into `state` because
+     * the main combine is already at 5 arms and the avatar updates are
+     * independent of the dashboard's food / sensor / notification streams.
+     */
+    val userInitial: StateFlow<String> = combine(
+        authRepository.observeCurrentUser(),
+        preferenceRepository.observeUserName(),
+    ) { firebaseUser, prefName ->
+        val name = firebaseUser?.displayName?.takeIf { it.isNotBlank() }
+            ?: firebaseUser?.email
+            ?: prefName.takeIf { it.isNotBlank() }
+            ?: ""
+        name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "?")
+
     val state: StateFlow<DashboardUiState> = combine(
         foodRepository.observeUseToday(today = endOfTodayMillis()),
         sensorRepository.observeConfigs(),

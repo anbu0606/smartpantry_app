@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.FastForward
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lab03g10.smartpantry.BuildConfig
 import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
 import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
@@ -80,6 +82,7 @@ private val ShortcutIcon   = Color(0xFF085041)
 // FoodItemEntity at render time so the screen doesn't leak entity coupling
 // into the card composable.
 private data class UrgencyItem(
+    val id: String,
     val emoji: String,
     val name: String,
     val badge: String,
@@ -101,7 +104,7 @@ private fun FoodItemEntity.toUrgencyItem(nowMillis: Long): UrgencyItem {
         "Frozen"    -> "🧊"
         else        -> "🥫"
     }
-    return UrgencyItem(emoji = emoji, name = name, badge = badge, isErrorBadge = daysLeft <= 0L)
+    return UrgencyItem(id = id, emoji = emoji, name = name, badge = badge, isErrorBadge = daysLeft <= 0L)
 }
 
 
@@ -130,9 +133,11 @@ fun DashboardScreen(
     onNavigateToExpiryCalendar: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToInventory: () -> Unit,
+    onNavigateToFoodDetail: (String) -> Unit,
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val userInitial by viewModel.userInitial.collectAsStateWithLifecycle()
     val pageCount      = state.sensorCards.size + 1
     val pagerState     = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
@@ -142,8 +147,10 @@ fun DashboardScreen(
         topBar         = {
             DashboardTopBar(
                 unreadCount = state.unreadNotificationCount,
+                userInitial = userInitial,
                 onNavigateToNotifications = onNavigateToNotifications,
                 onNavigateToProfile = onNavigateToProfile,
+                onTriggerSensorTick = viewModel::triggerSensorTickNow,
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -247,6 +254,7 @@ fun DashboardScreen(
                 UseTodaySection(
                     items = state.useTodayItems,
                     onNavigateToInventory = onNavigateToInventory,
+                    onItemClick = onNavigateToFoodDetail,
                 )
             }
 
@@ -329,8 +337,10 @@ private fun TimeGreeting(
 @Composable
 private fun DashboardTopBar(
     unreadCount: Int,
+    userInitial: String,
     onNavigateToNotifications: () -> Unit,
-    onNavigateToProfile: () -> Unit) {
+    onNavigateToProfile: () -> Unit,
+    onTriggerSensorTick: () -> Unit) {
     CenterAlignedTopAppBar(
         title = {
             Text(
@@ -340,6 +350,26 @@ private fun DashboardTopBar(
                 ),
                 color = MaterialTheme.colorScheme.primary,
             )
+        },
+        navigationIcon = {
+            // Debug-only fast-forward: enqueues a one-shot SensorTickWorker
+            // so demo + manual verification don't have to wait the 15-min
+            // periodic interval. Kept deliberately small & low-contrast so
+            // it doesn't read as a primary action. See docs/bug-log.md BUG-009.
+            if (BuildConfig.DEBUG) {
+                IconButton(
+                    onClick  = onTriggerSensorTick,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector        = Icons.Outlined.FastForward,
+                        contentDescription = "Trigger sensor tick (debug)",
+                        tint               = MaterialTheme.colorScheme.onSurfaceVariant
+                            .copy(alpha = 0.35f),
+                        modifier           = Modifier.size(16.dp),
+                    )
+                }
+            }
         },
         actions = {
             IconButton(onClick = onNavigateToNotifications) {
@@ -375,7 +405,7 @@ private fun DashboardTopBar(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text  = "A",
+                    text  = userInitial,
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.Bold,
                     ),
@@ -394,6 +424,7 @@ private fun DashboardTopBar(
 private fun UseTodaySection(
     items: List<FoodItemEntity>,
     onNavigateToInventory: () -> Unit,
+    onItemClick: (String) -> Unit,
 ) {
     val now = remember(items) { System.currentTimeMillis() }
     val urgencyItems = remember(items, now) { items.map { it.toUrgencyItem(now) } }
@@ -455,6 +486,7 @@ private fun UseTodaySection(
                         badge      = item.badge,
                         badgeColor = if (item.isErrorBadge) MaterialTheme.colorScheme.error
                                      else WarningAmber,
+                        onClick    = { onItemClick(item.id) },
                     )
                 }
             }
@@ -468,9 +500,12 @@ private fun UrgencyCard(
     name: String,
     badge: String,
     badgeColor: Color,
+    onClick: () -> Unit,
 ) {
     Surface(
-        modifier       = Modifier.size(width = 140.dp, height = 88.dp),
+        modifier       = Modifier
+            .size(width = 140.dp, height = 88.dp)
+            .clickable(onClick = onClick),
         shape          = RoundedCornerShape(16.dp),
         color          = MaterialTheme.colorScheme.surfaceContainerLowest,
         border         = BorderStroke(0.5.dp, CardBorder),

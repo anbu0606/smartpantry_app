@@ -21,8 +21,11 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,6 +62,8 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
+import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 import com.lab03g10.smartpantry.ui.viewmodel.ProfileViewModel
 
@@ -119,7 +124,35 @@ fun ProfileScreen(
     val switchStates = remember {
         mutableStateMapOf(*defaultSwitchStates.entries.map { it.key to it.value }.toTypedArray())
     }
-    var alertThreshold by remember { mutableFloatStateOf(6f) }
+
+    // Alert-threshold section state. Sensors come from Room via the VM;
+    // selectedSensorId follows the dropdown; the three slider values are local
+    // until the user taps "Save Thresholds" (then persisted via
+    // viewModel.saveSensorThresholds → SensorRepository.upsertConfig).
+    val sensors by viewModel.sensors.collectAsState()
+    var selectedSensorId by remember { mutableStateOf<String?>(null) }
+    LaunchedEffect(sensors) {
+        // Pick the first active sensor on entry so the form isn't blank.
+        if (selectedSensorId == null && sensors.isNotEmpty()) {
+            selectedSensorId = sensors.first().id
+        }
+        // Drop the selection if the user deleted that sensor in the meantime.
+        if (selectedSensorId != null && sensors.none { it.id == selectedSensorId }) {
+            selectedSensorId = sensors.firstOrNull()?.id
+        }
+    }
+    val selectedSensor = sensors.firstOrNull { it.id == selectedSensorId }
+    // Slider states key off the selected sensor — picking a different sensor
+    // resets the sliders to that sensor's persisted values.
+    var localTempC    by remember(selectedSensorId) {
+        mutableFloatStateOf(selectedSensor?.thresholdC ?: 0f)
+    }
+    var localHumidity by remember(selectedSensorId) {
+        mutableFloatStateOf(selectedSensor?.humidityThreshold ?: 70f)
+    }
+    var localMaxLux   by remember(selectedSensorId) {
+        mutableFloatStateOf(selectedSensor?.maxLux ?: 100f)
+    }
 
     Scaffold(
         topBar = {
@@ -328,9 +361,11 @@ fun ProfileScreen(
                 }
             }
 
-            // 7. Fridge alert threshold (local only — not persisted)
+            // 7. Per-sensor alert thresholds (temperature / humidity / light).
+            // Persisted to SensorConfigEntity → drives both the chart threshold
+            // line + per-segment colour AND the SensorTickWorker breach flag.
             item {
-                SectionLabel(title = "FRIDGE ALERT THRESHOLD")
+                SectionLabel(title = "ALERT THRESHOLDS")
                 ElevatedCard(
                     modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                     shape     = RoundedCornerShape(16.dp),
@@ -340,45 +375,82 @@ fun ProfileScreen(
                     elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
                 ) {
                     Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment     = Alignment.CenterVertically,
-                        ) {
+                        if (sensors.isEmpty()) {
                             Text(
-                                text  = "Temperature alert above:",
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface,
+                                text  = "Pair a sensor from the Dashboard to configure alert thresholds.",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
-                            Text(
-                                text  = "${alertThreshold.toInt()}°C",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Light),
-                                color = SliderActiveGreen,
-                            )
+                            return@Column
                         }
-                        Spacer(Modifier.height(8.dp))
-                        // 9 discrete positions (2–10) → steps = 7
-                        Slider(
-                            value         = alertThreshold,
-                            onValueChange = { alertThreshold = it },
-                            valueRange    = 2f..10f,
-                            steps         = 7,
-                            modifier      = Modifier.fillMaxWidth(),
-                            colors        = presetSliderColors(),
+
+                        SensorPickerDropdown(
+                            sensors          = sensors,
+                            selectedSensorId = selectedSensorId,
+                            onSelect         = { selectedSensorId = it },
                         )
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
+
+                        Spacer(Modifier.height(16.dp))
+
+                        ThresholdSlider(
+                            label      = "Temperature alert above",
+                            value      = localTempC,
+                            valueLabel = "${localTempC.toInt()}°C",
+                            range      = -25f..50f,
+                            // 75 discrete °C positions → steps = range size - 1
+                            steps      = 74,
+                            minLabel   = "−25°C",
+                            maxLabel   = "50°C",
+                            onChange   = { localTempC = it },
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        ThresholdSlider(
+                            label      = "Humidity alert above",
+                            value      = localHumidity,
+                            valueLabel = "${localHumidity.toInt()}%",
+                            range      = 0f..100f,
+                            steps      = 99,
+                            minLabel   = "0%",
+                            maxLabel   = "100%",
+                            onChange   = { localHumidity = it },
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        ThresholdSlider(
+                            label      = "Light alert above",
+                            value      = localMaxLux,
+                            valueLabel = "${localMaxLux.toInt()} lx",
+                            range      = 0f..1000f,
+                            // 50-lux granularity → 20 steps between min/max
+                            steps      = 19,
+                            minLabel   = "0 lx",
+                            maxLabel   = "1000 lx",
+                            onChange   = { localMaxLux = it },
+                        )
+
+                        Spacer(Modifier.height(16.dp))
+
+                        Button(
+                            onClick  = {
+                                selectedSensor?.let {
+                                    viewModel.saveSensorThresholds(
+                                        sensorId          = it.id,
+                                        thresholdC        = localTempC,
+                                        humidityThreshold = localHumidity,
+                                        maxLux            = localMaxLux,
+                                    )
+                                }
+                            },
+                            enabled  = selectedSensor != null,
+                            modifier = Modifier.fillMaxWidth().height(48.dp),
+                            shape    = RoundedCornerShape(12.dp),
                         ) {
                             Text(
-                                text  = "2°C",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = SubtitleGrey,
-                            )
-                            Text(
-                                text  = "10°C",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = SubtitleGrey,
+                                text  = "Save Thresholds",
+                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
                             )
                         }
                     }
@@ -442,6 +514,7 @@ fun ProfileScreen(
                             textAlign = TextAlign.Center,
                         )
                     }
+
                 }
             }
         }
@@ -489,6 +562,113 @@ private fun presetSliderColors(): SliderColors = SliderDefaults.colors(
     activeTickColor    = Color.Transparent,
     inactiveTickColor  = Color.Transparent,
 )
+
+// Dropdown for picking which sensor's thresholds to edit. Built on Material3
+// ExposedDropdownMenuBox — a sealed pattern that handles focus / dismiss /
+// anchor positioning consistently.
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SensorPickerDropdown(
+    sensors: List<SensorConfigEntity>,
+    selectedSensorId: String?,
+    onSelect: (String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val selected = sensors.firstOrNull { it.id == selectedSensorId }
+    val displayText = selected?.let {
+        val env = runCatching { EnvironmentType.valueOf(it.environmentType) }.getOrNull()
+        if (env != null) "${env.emoji} ${it.displayName}" else it.displayName
+    } ?: "Select sensor"
+
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+    ) {
+        OutlinedTextField(
+            value         = displayText,
+            onValueChange = {},
+            readOnly      = true,
+            label         = { Text("Sensor") },
+            trailingIcon  = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+            colors        = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+            modifier      = Modifier
+                .fillMaxWidth()
+                .menuAnchor(),
+        )
+        ExposedDropdownMenu(
+            expanded         = expanded,
+            onDismissRequest = { expanded = false },
+        ) {
+            sensors.forEach { sensor ->
+                val env = runCatching { EnvironmentType.valueOf(sensor.environmentType) }.getOrNull()
+                val rowText = if (env != null) "${env.emoji} ${sensor.displayName}" else sensor.displayName
+                DropdownMenuItem(
+                    text    = { Text(rowText) },
+                    onClick = {
+                        onSelect(sensor.id)
+                        expanded = false
+                    },
+                )
+            }
+        }
+    }
+}
+
+// Generic threshold-slider row: bold label + right-aligned current value,
+// followed by the slider and a min/max scale legend.
+@Composable
+private fun ThresholdSlider(
+    label: String,
+    value: Float,
+    valueLabel: String,
+    range: ClosedFloatingPointRange<Float>,
+    steps: Int,
+    minLabel: String,
+    maxLabel: String,
+    onChange: (Float) -> Unit,
+) {
+    Column {
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment     = Alignment.CenterVertically,
+        ) {
+            Text(
+                text  = label,
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text  = valueLabel,
+                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.SemiBold),
+                color = SliderActiveGreen,
+            )
+        }
+        Slider(
+            value         = value,
+            onValueChange = onChange,
+            valueRange    = range,
+            steps         = steps,
+            modifier      = Modifier.fillMaxWidth(),
+            colors        = presetSliderColors(),
+        )
+        Row(
+            modifier              = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+        ) {
+            Text(
+                text  = minLabel,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = SubtitleGrey,
+            )
+            Text(
+                text  = maxLabel,
+                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                color = SubtitleGrey,
+            )
+        }
+    }
+}
 
 // User header
 

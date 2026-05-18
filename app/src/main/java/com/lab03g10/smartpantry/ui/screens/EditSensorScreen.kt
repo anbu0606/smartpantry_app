@@ -23,6 +23,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
@@ -39,8 +40,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -51,8 +52,11 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.EditSensorViewModel
 
 private val SectionGreen = Color(0xFF0F6E56)
 private val DeleteRed    = Color(0xFFBA1A1A)
@@ -66,16 +70,17 @@ private val DeleteRed    = Color(0xFFBA1A1A)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EditSensorScreen(
-    sensorId: String? = null,
-    onNavigateBack: () -> Unit
+    onNavigateBack: () -> Unit,
+    viewModel: EditSensorViewModel = hiltViewModel(),
 ) {
-    var sensorName       by remember { mutableStateOf("Pantry") }
-    var selectedType     by remember { mutableStateOf(EnvironmentType.PANTRY) }
-    var threshold        by remember { mutableFloatStateOf(28f) }
-    var luxThreshold     by remember { mutableFloatStateOf(selectedType.suggestedMaxLux) }
+    val state by viewModel.state.collectAsStateWithLifecycle()
     var showDeleteDialog by remember { mutableStateOf(false) }
 
-    val isFormValid = sensorName.isNotBlank()
+    // Navigate back as soon as the VM signals the upsert / delete completed.
+    // Driven off state flags so a config change mid-save still triggers it.
+    LaunchedEffect(state.isSaved, state.isDeleted) {
+        if (state.isSaved || state.isDeleted) onNavigateBack()
+    }
 
     // removal confirmation dialog
     if (showDeleteDialog) {
@@ -84,14 +89,15 @@ fun EditSensorScreen(
             title  = { Text("Remove Sensor") },
             text   = {
                 Text(
-                    "Remove TempHumid-B891 from Smart Pantry? All stored readings will be " +
-                        "deleted. This cannot be undone.",
+                    "Remove ${state.displayName.ifBlank { state.deviceId.ifBlank { "this sensor" } }} " +
+                        "from Smart Pantry? It will stop appearing in Storage Monitor, but its " +
+                        "historical readings are preserved.",
                 )
             },
             confirmButton = {
-                TextButton(onClick = { 
+                TextButton(onClick = {
                     showDeleteDialog = false
-                    onNavigateBack() 
+                    viewModel.delete()
                 }) {
                     Text("Remove", color = MaterialTheme.colorScheme.error)
                 }
@@ -130,6 +136,19 @@ fun EditSensorScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
+        if (state.isLoading) {
+            Column(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding),
+                verticalArrangement = Arrangement.Center,
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
+                CircularProgressIndicator()
+            }
+            return@Scaffold
+        }
+
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -141,7 +160,8 @@ fun EditSensorScreen(
         ) {
             Spacer(Modifier.height(4.dp))
 
-            //Device chip
+            //Device chip — actual paired device id, falls back to a placeholder
+            // if the row is missing (shouldn't happen after the loading guard).
             Surface(
                 shape = RoundedCornerShape(50),
                 color = MaterialTheme.colorScheme.secondaryContainer,
@@ -158,7 +178,7 @@ fun EditSensorScreen(
                         tint               = MaterialTheme.colorScheme.onSecondaryContainer,
                     )
                     Text(
-                        text  = "TempHumid-B891",
+                        text  = state.deviceId.ifBlank { "Unknown device" },
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontWeight = FontWeight.Medium,
                         ),
@@ -169,8 +189,8 @@ fun EditSensorScreen(
 
             // Sensor name field
             OutlinedTextField(
-                value         = sensorName,
-                onValueChange = { sensorName = it },
+                value         = state.displayName,
+                onValueChange = viewModel::onDisplayNameChange,
                 modifier      = Modifier.fillMaxWidth(),
                 label         = { Text("Sensor name *") },
                 leadingIcon   = {
@@ -205,12 +225,8 @@ fun EditSensorScreen(
                         rowTypes.forEach { type ->
                             EnvironmentTypeCard(
                                 type     = type,
-                                selected = selectedType == type,
-                                onClick  = {
-                                    selectedType = type
-                                    threshold    = type.suggestedThresholdC
-                                    luxThreshold = type.suggestedMaxLux
-                                },
+                                selected = state.environmentType == type,
+                                onClick  = { viewModel.onEnvironmentChange(type) },
                                 modifier = Modifier.weight(1f),
                             )
                         }
@@ -252,7 +268,7 @@ fun EditSensorScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text  = "${threshold.toInt()} °C",
+                            text  = "${state.thresholdC.toInt()} °C",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
                             ),
@@ -261,8 +277,8 @@ fun EditSensorScreen(
                     }
 
                     Slider(
-                        value         = threshold,
-                        onValueChange = { threshold = it },
+                        value         = state.thresholdC,
+                        onValueChange = viewModel::onThresholdChange,
                         valueRange    = -20f..50f,
                         modifier      = Modifier.fillMaxWidth(),
                         colors        = SliderDefaults.colors(
@@ -273,8 +289,8 @@ fun EditSensorScreen(
                     )
 
                     Text(
-                        text  = "Suggested for ${selectedType.label}: " +
-                                "${selectedType.suggestedThresholdC.toInt()} °C",
+                        text  = "Suggested for ${state.environmentType.label}: " +
+                                "${state.environmentType.suggestedThresholdC.toInt()} °C",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -314,7 +330,7 @@ fun EditSensorScreen(
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
                         Text(
-                            text  = "${luxThreshold.toInt()} lx",
+                            text  = "${state.maxLux.toInt()} lx",
                             style = MaterialTheme.typography.titleMedium.copy(
                                 fontWeight = FontWeight.SemiBold,
                             ),
@@ -323,8 +339,8 @@ fun EditSensorScreen(
                     }
 
                     Slider(
-                        value         = luxThreshold,
-                        onValueChange = { luxThreshold = it },
+                        value         = state.maxLux,
+                        onValueChange = viewModel::onMaxLuxChange,
                         valueRange    = 0f..1000f,
                         modifier      = Modifier.fillMaxWidth(),
                         colors        = SliderDefaults.colors(
@@ -335,22 +351,24 @@ fun EditSensorScreen(
                     )
 
                     Text(
-                        text  = "Suggested for ${selectedType.label}: " +
-                                "${selectedType.suggestedMaxLux.toInt()} lx",
+                        text  = "Suggested for ${state.environmentType.label}: " +
+                                "${state.environmentType.suggestedMaxLux.toInt()} lx",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
 
-            //save button
+            //save button — shows spinner while the upsert is in flight; navigation
+            // back fires from the LaunchedEffect on state.isSaved.
+            val canSave = state.isValid && !state.isSaving
             Button(
-                onClick        = { if (isFormValid) onNavigateBack() },
+                onClick        = { viewModel.save() },
                 modifier       = Modifier
                     .fillMaxWidth()
                     .padding(top = 8.dp)
                     .height(52.dp),
-                enabled        = isFormValid,
+                enabled        = canSave,
                 shape          = RoundedCornerShape(50),
                 colors         = ButtonDefaults.buttonColors(
                     containerColor         = MaterialTheme.colorScheme.primary,
@@ -361,12 +379,20 @@ fun EditSensorScreen(
                 ),
                 contentPadding = PaddingValues(vertical = 14.dp),
             ) {
-                Text(
-                    text  = "Save Changes",
-                    style = MaterialTheme.typography.labelLarge.copy(
-                        fontWeight = FontWeight.Bold,
-                    ),
-                )
+                if (state.isSaving) {
+                    CircularProgressIndicator(
+                        modifier    = Modifier.size(20.dp),
+                        color       = MaterialTheme.colorScheme.onPrimary,
+                        strokeWidth = 2.dp,
+                    )
+                } else {
+                    Text(
+                        text  = "Save Changes",
+                        style = MaterialTheme.typography.labelLarge.copy(
+                            fontWeight = FontWeight.Bold,
+                        ),
+                    )
+                }
             }
 
             // delete sensor button
@@ -449,7 +475,7 @@ private fun EnvironmentTypeCard(
 @Composable
 private fun PreviewEditSensorLight() {
     SmartPantryTheme {
-        EditSensorScreen(onNavigateBack = {})
+        Text("Edit-sensor preview uses live app data at runtime.")
     }
 }
 
@@ -462,6 +488,6 @@ private fun PreviewEditSensorLight() {
 @Composable
 private fun PreviewEditSensorDark() {
     SmartPantryTheme(darkTheme = true) {
-        EditSensorScreen(onNavigateBack = {})
+        Text("Edit-sensor preview uses live app data at runtime.")
     }
 }

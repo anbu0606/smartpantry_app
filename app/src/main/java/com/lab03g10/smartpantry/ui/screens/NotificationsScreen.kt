@@ -16,8 +16,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LightMode
@@ -34,6 +36,8 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -44,8 +48,13 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lab03g10.smartpantry.data.local.entity.NotificationEntity
 import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.NotificationsViewModel
+import java.util.concurrent.TimeUnit
 
 // Design tokens
 private val SectionLabelGreen = Color(0xFF0F6E56)
@@ -60,99 +69,77 @@ private val ExpiryIcon         = Color(0xFFF57F17)
 private val LowStockCircleBg   = Color(0xFFE8F5E9)
 private val LowStockIcon       = Color(0xFF2E7D32)
 
-// Notification type
-private enum class NotifType { TEMP_ALERT, LIGHT_ALERT, EXPIRY, LOW_STOCK }
+// Notification type — mapped from NotificationEntity.type string in toIconBucket().
+private enum class NotifType { TEMP_ALERT, LIGHT_ALERT, EXPIRY, LOW_STOCK, SHOPPING }
 
-// Notification model
-private data class NotifItem(
-    val type: NotifType,
-    val title: String,
-    val subtitle: String,
-    val timeAgo: String,
-    val isUnread: Boolean = true,
-)
+/**
+ * Maps the persisted `NotificationEntity.type` string to the local icon bucket.
+ * SENSOR_BREACH collapses to TEMP_ALERT because the entity doesn't distinguish
+ * temperature vs humidity vs light breaches — a future schema change could
+ * split this.
+ */
+private fun NotificationEntity.toIconBucket(): NotifType = when (type) {
+    "EXPIRY_SOON"   -> NotifType.EXPIRY
+    "SENSOR_BREACH" -> NotifType.TEMP_ALERT
+    "LOW_STOCK"     -> NotifType.LOW_STOCK
+    "SHOPPING"      -> NotifType.SHOPPING
+    else            -> NotifType.EXPIRY
+}
 
-// Hardcoded notification data
-private val todayNotifs = listOf(
-    NotifItem(
-        type     = NotifType.LIGHT_ALERT,
-        title    = "Pantry Light Exposure Alert",
-        subtitle = "Pantry reached 420 lx — above 400 lx threshold",
-        timeAgo  = "1h ago",
-        isUnread = true,
-    ),
-    NotifItem(
-        type     = NotifType.TEMP_ALERT,
-        title    = "Pantry Temperature Alert",
-        subtitle = "Pantry reached 29.5 °C — above 28 °C threshold",
-        timeAgo  = "2h ago",
-        isUnread = true,
-    ),
-    NotifItem(
-        type     = NotifType.EXPIRY,
-        title    = "Milk expiring soon",
-        subtitle = "Expires today — use or discard immediately",
-        timeAgo  = "5h ago",
-        isUnread = true,
-    ),
-    NotifItem(
-        type     = NotifType.EXPIRY,
-        title    = "Butter expiring soon",
-        subtitle = "Expires today — 250g remaining",
-        timeAgo  = "5h ago",
-        isUnread = true,
-    ),
-)
-
-private val yesterdayNotifs = listOf(
-    NotifItem(
-        type     = NotifType.LOW_STOCK,
-        title    = "Running low: Chicken Breast",
-        subtitle = "Only 500g remaining in Fridge",
-        timeAgo  = "1 day ago",
-        isUnread = false,
-    ),
-    NotifItem(
-        type     = NotifType.EXPIRY,
-        title    = "Spinach expiring soon",
-        subtitle = "Expires in 2 days — 200g in Fridge",
-        timeAgo  = "1 day ago",
-        isUnread = false,
-    ),
-)
-
-private val thisWeekNotifs = listOf(
-    NotifItem(
-        type     = NotifType.TEMP_ALERT,
-        title    = "Fridge Temperature Spike",
-        subtitle = "Fridge briefly reached 8.5 °C at 20:00",
-        timeAgo  = "3 days ago",
-        isUnread = false,
-    ),
-    NotifItem(
-        type     = NotifType.LOW_STOCK,
-        title    = "Running low: Basmati Rice",
-        subtitle = "Less than 500g remaining in Pantry",
-        timeAgo  = "5 days ago",
-        isUnread = false,
-    ),
-)
+/**
+ * "1h ago" / "3d ago" / "just now" style relative time. Falls back to "Nd ago"
+ * for anything older than a day; we don't bother with absolute dates since the
+ * Today / Earlier section split already establishes whether the row is recent.
+ */
+private fun formatTimeAgo(nowMillis: Long, createdAt: Long): String {
+    val deltaMs = (nowMillis - createdAt).coerceAtLeast(0)
+    val minutes = TimeUnit.MILLISECONDS.toMinutes(deltaMs)
+    val hours   = TimeUnit.MILLISECONDS.toHours(deltaMs)
+    val days    = TimeUnit.MILLISECONDS.toDays(deltaMs)
+    return when {
+        minutes < 1L -> "just now"
+        minutes < 60L -> "${minutes}m ago"
+        hours < 24L -> "${hours}h ago"
+        days == 1L -> "1 day ago"
+        else -> "$days days ago"
+    }
+}
 
 // Public composable
 
 /**
- * Notification screen
+ * Notification screen — driven by NotificationsViewModel.
  *
- * Shows notifications grouped as:
- * - TODAY
- * - YESTERDAY
- * - THIS WEEK
- *
- * @param onNavigateBack -> used when back button is clicked
+ * Two sections: TODAY and EARLIER. Tap-on-row marks the row read and (if the
+ * notification has a deep-link target) navigates to the related food or
+ * sensor screen.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
-fun NotificationsScreen(onNavigateBack: () -> Unit) {
+fun NotificationsScreen(
+    onNavigateBack: () -> Unit,
+    onNavigateToFood: (String) -> Unit = {},
+    onNavigateToSensor: (String) -> Unit = {},
+    viewModel: NotificationsViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
+
+    // Snapshot once per composition so every row in the same pass uses the
+    // same "now" for relative-time labels.
+    val now = remember(state) { System.currentTimeMillis() }
+
+    val onRowTap: (NotificationEntity) -> Unit = remember(viewModel) {
+        { notif ->
+            viewModel.markOneRead(notif.id)
+            // Deep-link priority: food first, then sensor. Notifications that
+            // carry neither just get marked read in place.
+            when {
+                notif.relatedFoodId != null   -> onNavigateToFood(notif.relatedFoodId)
+                notif.relatedSensorId != null -> onNavigateToSensor(notif.relatedSensorId)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -173,16 +160,18 @@ fun NotificationsScreen(onNavigateBack: () -> Unit) {
                     }
                 },
                 actions = {
+                    val hasUnread = state.unreadCount > 0
                     TextButton(
-                        // TODO: Assessment 3: replace hardcoded list with NotificationRepository backed by FCM push tokens + Room; unread count should drive the badge on the Dashboard bell icon
-                        onClick = {},
+                        onClick = { viewModel.markAllRead() },
+                        enabled = hasUnread,
                     ) {
                         Text(
                             text  = "Mark all read",
                             style = MaterialTheme.typography.labelLarge.copy(
                                 fontWeight = FontWeight.Medium,
                             ),
-                            color = SectionLabelGreen,
+                            color = if (hasUnread) SectionLabelGreen
+                                    else SectionLabelGreen.copy(alpha = 0.4f),
                         )
                     }
                 },
@@ -193,11 +182,7 @@ fun NotificationsScreen(onNavigateBack: () -> Unit) {
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
-        // Forward-compat: once Abinaya replaces the hardcoded lists with VM
-        // state, an empty inbox renders the "all caught up" hint instead of
-        // three orphan sticky headers.
-        val allEmpty = todayNotifs.isEmpty() && yesterdayNotifs.isEmpty() && thisWeekNotifs.isEmpty()
-        if (allEmpty) {
+        if (state.today.isEmpty() && state.earlier.isEmpty()) {
             EmptyState(
                 icon           = Icons.Outlined.CheckCircle,
                 title          = "All caught up",
@@ -207,47 +192,37 @@ fun NotificationsScreen(onNavigateBack: () -> Unit) {
             return@Scaffold
         }
 
+        val dividerColor = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
         LazyColumn(
             modifier       = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-            stickyHeader {
-                GroupHeader(label = "TODAY")
-            }
-            items(todayNotifs) { notif ->
-                NotifItemRow(item = notif)
-                if (notif != todayNotifs.last()) {
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            if (state.today.isNotEmpty()) {
+                stickyHeader { GroupHeader(label = "TODAY") }
+                items(state.today, key = { it.id }) { notif ->
+                    NotifItemRow(
+                        notif    = notif,
+                        timeAgo  = formatTimeAgo(now, notif.createdAt),
+                        onClick  = { onRowTap(notif) },
                     )
+                    if (notif != state.today.last()) {
+                        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+                    }
                 }
             }
 
-            stickyHeader {
-                GroupHeader(label = "YESTERDAY")
-            }
-            items(yesterdayNotifs) { notif ->
-                NotifItemRow(item = notif)
-                if (notif != yesterdayNotifs.last()) {
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
+            if (state.earlier.isNotEmpty()) {
+                stickyHeader { GroupHeader(label = "EARLIER") }
+                items(state.earlier, key = { it.id }) { notif ->
+                    NotifItemRow(
+                        notif    = notif,
+                        timeAgo  = formatTimeAgo(now, notif.createdAt),
+                        onClick  = { onRowTap(notif) },
                     )
-                }
-            }
-
-            stickyHeader {
-                GroupHeader(label = "THIS WEEK")
-            }
-            items(thisWeekNotifs) { notif ->
-                NotifItemRow(item = notif)
-                if (notif != thisWeekNotifs.last()) {
-                    HorizontalDivider(
-                        thickness = 0.5.dp,
-                        color     = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f),
-                    )
+                    if (notif != state.earlier.last()) {
+                        HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+                    }
                 }
             }
         }
@@ -275,12 +250,18 @@ private fun GroupHeader(label: String) {
 // Notification row
 
 @Composable
-private fun NotifItemRow(item: NotifItem) {
-    val (circleBg, iconTint, icon) = notifTypeAssets(item.type)
+private fun NotifItemRow(
+    notif: NotificationEntity,
+    timeAgo: String,
+    onClick: () -> Unit,
+) {
+    val (circleBg, iconTint, icon) = notifTypeAssets(notif.toIconBucket())
+    val isUnread = !notif.read
 
     Row(
         modifier          = Modifier
             .fillMaxWidth()
+            .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -306,14 +287,14 @@ private fun NotifItemRow(item: NotifItem) {
             verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
             Text(
-                text  = item.title,
+                text  = notif.title,
                 style = MaterialTheme.typography.bodyMedium.copy(
                     fontWeight = FontWeight.SemiBold,
                 ),
                 color = MaterialTheme.colorScheme.onSurface,
             )
             Text(
-                text     = item.subtitle,
+                text     = notif.body,
                 style    = MaterialTheme.typography.bodySmall,
                 color    = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 2,
@@ -326,11 +307,11 @@ private fun NotifItemRow(item: NotifItem) {
             verticalArrangement = Arrangement.spacedBy(6.dp),
         ) {
             Text(
-                text  = item.timeAgo,
+                text  = timeAgo,
                 style = MaterialTheme.typography.labelSmall,
                 color = LabelGrey,
             )
-            if (item.isUnread) {
+            if (isUnread) {
                 Box(
                     modifier = Modifier
                         .size(8.dp)
@@ -356,6 +337,7 @@ private fun notifTypeAssets(type: NotifType): NotifAssets = when (type) {
     NotifType.LIGHT_ALERT -> NotifAssets(LightAlertCircleBg, LightAlertIcon, Icons.Outlined.LightMode)
     NotifType.EXPIRY      -> NotifAssets(ExpiryCircleBg,     ExpiryIcon,     Icons.Outlined.Schedule)
     NotifType.LOW_STOCK   -> NotifAssets(LowStockCircleBg,   LowStockIcon,   Icons.Outlined.Inventory2)
+    NotifType.SHOPPING    -> NotifAssets(LowStockCircleBg,   LowStockIcon,   Icons.Filled.ShoppingCart)
 }
 
 // Previews
@@ -364,7 +346,7 @@ private fun notifTypeAssets(type: NotifType): NotifAssets = when (type) {
 @Composable
 private fun PreviewNotificationsLight() {
     SmartPantryTheme {
-        NotificationsScreen(onNavigateBack = {})
+        Text("Notifications preview uses live app data at runtime.")
     }
 }
 
@@ -377,6 +359,6 @@ private fun PreviewNotificationsLight() {
 @Composable
 private fun PreviewNotificationsDark() {
     SmartPantryTheme(darkTheme = true) {
-        NotificationsScreen(onNavigateBack = {})
+        Text("Notifications preview uses live app data at runtime.")
     }
 }

@@ -5,9 +5,14 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
+import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
 import com.lab03g10.smartpantry.data.local.entity.ShoppingItemEntity
 import com.lab03g10.smartpantry.data.local.entity.WasteLogEntity
+import com.lab03g10.smartpantry.domain.model.EnvironmentType
+import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
+import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import com.lab03g10.smartpantry.domain.repo.ShoppingRepository
 import com.lab03g10.smartpantry.domain.repo.WasteRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -23,8 +28,14 @@ data class ShoppingListRowUi(
     val name: String,
     val subtitle: String,
     val quantity: String,
+    val unit: String,
     val category: String,
     val checked: Boolean,
+    val nominalExpiryDate: Long,
+    val storageLocationId: String?,
+    // Pre-resolved label for the storage chip; the row composable
+    // therefore doesn't need to know about the sensors list.
+    val storageLabel: String,
     val autoSuggested: Boolean,
 )
 
@@ -38,6 +49,8 @@ data class ShoppingListUiState(
     val totalCount: Int = 0,
     val isLoading: Boolean = true,
     val errorMessage: String? = null,
+    // Passed into the storage picker dialog on each row.
+    val sensors: List<SensorConfigEntity> = emptyList(),
 )
 
 /**
@@ -49,11 +62,45 @@ class ShoppingListViewModel @Inject constructor(
     private val shoppingRepository: ShoppingRepository,
     private val wasteRepository: WasteRepository,
     private val preferenceRepository: PreferenceRepository,
+    private val foodRepository: FoodRepository,
+    private val sensorRepository: SensorRepository,
 ) : ViewModel() {
 
     companion object {
         // A dismissed suggestion will stay hidden for 3 days
         private const val SUGGESTION_COOLDOWN_MS = 3L * 24L * 60L * 60L * 1000L
+
+        private const val DAY_MS = 24L * 60L * 60L * 1000L
+
+        // Category-based shelf life used as the default expiry shown on a
+        // shopping row (and copied into inventory on purchase). Numbers are
+        // intentionally conservative — the user can edit each row.
+        private val DEFAULT_SHELF_LIFE_DAYS = mapOf(
+            "Dairy" to 7,
+            "Meat" to 5,
+            "Produce" to 7,
+            "Grains" to 30,
+            "Frozen" to 90,
+        )
+        private const val DEFAULT_SHELF_LIFE_DAYS_OTHER = 14
+
+        // Category → preferred storage environment when the user hasn't
+        // overridden the row. Resolved against the user's actual sensors;
+        // if none of that type exist we fall back to "Unmonitored" (null).
+        private val DEFAULT_ENVIRONMENT_BY_CATEGORY = mapOf(
+            "Dairy" to EnvironmentType.REFRIGERATOR,
+            "Meat" to EnvironmentType.REFRIGERATOR,
+            "Produce" to EnvironmentType.REFRIGERATOR,
+            "Frozen" to EnvironmentType.FREEZER,
+            "Grains" to EnvironmentType.PANTRY,
+        )
+        private val DEFAULT_ENVIRONMENT_OTHER = EnvironmentType.PANTRY
+
+        // Single-purchase default when the source (waste log) has no unit info.
+        private const val DEFAULT_QUANTITY = "1"
+        private const val DEFAULT_UNIT = "pcs"
+
+        const val STORAGE_LABEL_UNMONITORED = "Unmonitored"
     }
 
     // This stores the current UI state
@@ -69,11 +116,17 @@ class ShoppingListViewModel @Inject constructor(
     // Stores dismissed suggestion times loaded from DataStore
     private var dismissedSuggestions: Map<String, Long> = emptyMap()
 
+    // Sensors available for storage assignment (drives the row's storage
+    // chip + picker dialog). Active and inactive sensors both flow
+    // through observeConfigs(); the picker filters as needed.
+    private var availableSensors: List<SensorConfigEntity> = emptyList()
+
     // Load shopping list, waste history and dismissed suggestions when ViewModel starts
     init {
         loadShoppingItems()
         loadWasteHistory()
         loadDismissedSuggestions()
+        loadSensors()
     }
 
     /**
@@ -111,6 +164,26 @@ class ShoppingListViewModel @Inject constructor(
                 uiState = uiState.copy(
                     isLoading = false,
                     errorMessage = "Could not load waste history",
+                )
+            }
+        }
+    }
+
+    /**
+     * Loads the user's sensor configurations so the row can show the
+     * paired sensor's display name and the picker can list them.
+     */
+    private fun loadSensors() {
+        viewModelScope.launch {
+            try {
+                sensorRepository.observeConfigs().collect { sensors ->
+                    availableSensors = sensors
+                    updateScreenState()
+                }
+            } catch (exception: Exception) {
+                uiState = uiState.copy(
+                    isLoading = false,
+                    errorMessage = "Could not load sensor configurations",
                 )
             }
         }
@@ -163,10 +236,14 @@ class ShoppingListViewModel @Inject constructor(
     }
 
     /**
-     * This function removes all checked items from the shopping list.
+     * Mark all checked items as purchased: copy each into the inventory
+     * (food_items) using the per-row quantity / unit / expiry the user
+     * adjusted on the shopping row, then remove them from the shopping list.
      */
     fun onDeleteCheckedItems() {
         viewModelScope.launch {
+
+            val now = System.currentTimeMillis()
 
             // Loop through all shopping items
             for (item in savedShoppingItems) {
@@ -185,6 +262,29 @@ class ShoppingListViewModel @Inject constructor(
                         preferenceRepository.markSuggestionDismissed(suggestionKey)
                     }
 
+                    // Hand the item off to inventory using the values the
+                    // user confirmed on the row. nominalExpiryDate doubles
+                    // as effectiveExpiryDate until a sensor adjusts it.
+                    val foodItem = FoodItemEntity(
+                        id = UUID.randomUUID().toString(),
+                        name = item.name.removePrefix("Restock "),
+                        category = item.category,
+                        quantity = item.quantity,
+                        unit = item.unit,
+                        barcode = null,
+                        imageUrl = null,
+                        purchaseDate = now,
+                        nominalExpiryDate = item.nominalExpiryDate,
+                        effectiveExpiryDate = item.nominalExpiryDate,
+                        storageLocationId = item.storageLocationId,
+                        notes = null,
+                        createdAt = now,
+                        updatedAt = now,
+                        consumed = false,
+                        wasted = false,
+                    )
+                    foodRepository.upsert(foodItem)
+
                     shoppingRepository.delete(item.id)
                 }
             }
@@ -197,14 +297,19 @@ class ShoppingListViewModel @Inject constructor(
     fun onAddSuggestedItem(row: ShoppingListRowUi) {
         viewModelScope.launch {
 
+            val now = System.currentTimeMillis()
+
             // Create new shopping item
             val item = ShoppingItemEntity(
                 id = UUID.randomUUID().toString(),
                 name = row.name,
                 quantity = row.quantity,
+                unit = row.unit,
                 category = row.category,
                 checked = false,
-                addedAt = System.currentTimeMillis(),
+                addedAt = now,
+                nominalExpiryDate = row.nominalExpiryDate,
+                storageLocationId = row.storageLocationId,
                 autoSuggested = true,
             )
 
@@ -218,6 +323,34 @@ class ShoppingListViewModel @Inject constructor(
              * The suggestion should be dismissed only after the user checks
              * and clears the item.
              */
+        }
+    }
+
+    /**
+     * Row-level edits — three independent updates so a re-render only
+     * touches the one column that changed.
+     */
+    fun onUpdateQuantity(id: String, quantity: String) {
+        viewModelScope.launch {
+            shoppingRepository.updateQuantity(id, quantity)
+        }
+    }
+
+    fun onUpdateUnit(id: String, unit: String) {
+        viewModelScope.launch {
+            shoppingRepository.updateUnit(id, unit)
+        }
+    }
+
+    fun onUpdateExpiry(id: String, nominalExpiryDate: Long) {
+        viewModelScope.launch {
+            shoppingRepository.updateExpiry(id, nominalExpiryDate)
+        }
+    }
+
+    fun onUpdateStorage(id: String, storageLocationId: String?) {
+        viewModelScope.launch {
+            shoppingRepository.updateStorage(id, storageLocationId)
         }
     }
 
@@ -254,6 +387,7 @@ class ShoppingListViewModel @Inject constructor(
             totalCount = shoppingRows.size,
             isLoading = false,
             errorMessage = null,
+            sensors = availableSensors,
         )
     }
 
@@ -266,10 +400,43 @@ class ShoppingListViewModel @Inject constructor(
             name = name,
             subtitle = category,
             quantity = quantity,
+            unit = unit,
             category = category,
             checked = checked,
+            nominalExpiryDate = nominalExpiryDate,
+            storageLocationId = storageLocationId,
+            storageLabel = storageLabelFor(storageLocationId),
             autoSuggested = autoSuggested,
         )
+    }
+
+    /**
+     * Default expiry (epoch millis) to seed a new shopping row with. Used by
+     * auto-suggestions; the user can still edit it on the row.
+     */
+    private fun defaultExpiryFor(category: String, now: Long = System.currentTimeMillis()): Long {
+        val days = DEFAULT_SHELF_LIFE_DAYS[category] ?: DEFAULT_SHELF_LIFE_DAYS_OTHER
+        return now + days * DAY_MS
+    }
+
+    /**
+     * Picks a sensor of the preferred environment type for the given
+     * category. Returns null ("Unmonitored") if no matching sensor exists.
+     */
+    private fun defaultStorageFor(category: String): String? {
+        val targetType = DEFAULT_ENVIRONMENT_BY_CATEGORY[category] ?: DEFAULT_ENVIRONMENT_OTHER
+        return availableSensors.firstOrNull { it.environmentType == targetType.name }?.id
+    }
+
+    /**
+     * Resolves a sensor id into a human label for the storage chip. The
+     * row entity stores only the id; the UI display name lives on
+     * SensorConfigEntity, which can be renamed by the user.
+     */
+    private fun storageLabelFor(storageLocationId: String?): String {
+        if (storageLocationId == null) return STORAGE_LABEL_UNMONITORED
+        return availableSensors.firstOrNull { it.id == storageLocationId }?.displayName
+            ?: STORAGE_LABEL_UNMONITORED
     }
 
     /**
@@ -317,14 +484,19 @@ class ShoppingListViewModel @Inject constructor(
                 !alreadyHasItem(foodName, category) &&
                 !isSuggestionInCooldown(suggestionKey)
             ) {
+                val defaultStorage = defaultStorageFor(category)
                 suggestedRows.add(
                     ShoppingListRowUi(
                         id = "suggestion_$suggestionKey",
                         name = "Restock $foodName",
                         subtitle = "$category - Suggested from $count waste records",
-                        quantity = "x1",
+                        quantity = DEFAULT_QUANTITY,
+                        unit = DEFAULT_UNIT,
                         category = category,
                         checked = false,
+                        nominalExpiryDate = defaultExpiryFor(category),
+                        storageLocationId = defaultStorage,
+                        storageLabel = storageLabelFor(defaultStorage),
                         autoSuggested = true,
                     )
                 )

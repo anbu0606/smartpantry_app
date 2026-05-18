@@ -33,7 +33,7 @@ class AnalyticsViewModel @Inject constructor(
         loadCategoryTotals()
     }
 
-    private fun loadCategoryTotals() {
+    private fun loadMonthlyTotals() {
         viewModelScope.launch {
             wasteRepository.observeMonthlyTotals().collect { monthlyList ->
 
@@ -51,7 +51,7 @@ class AnalyticsViewModel @Inject constructor(
         }
     }
 
-    private fun loadMonthlyTotals() {
+    private fun loadCategoryTotals() {
         viewModelScope.launch {
             wasteRepository.observeByCategory().collect { categoryList ->
 

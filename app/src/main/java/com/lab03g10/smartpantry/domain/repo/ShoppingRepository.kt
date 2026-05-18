@@ -19,4 +19,12 @@ interface ShoppingRepository {
 
     suspend fun toggle(id: String)
 
+    suspend fun updateQuantity(id: String, quantity: String)
+
+    suspend fun updateUnit(id: String, unit: String)
+
+    suspend fun updateExpiry(id: String, nominalExpiryDate: Long)
+
+    suspend fun updateStorage(id: String, storageLocationId: String?)
+
 }

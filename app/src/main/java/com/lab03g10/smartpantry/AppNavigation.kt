@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import com.lab03g10.smartpantry.ui.screens.AddEditFoodScreen
 import com.lab03g10.smartpantry.ui.screens.AddSensorScreen
-import com.lab03g10.smartpantry.ui.screens.AnalyticsScreen
 import com.lab03g10.smartpantry.ui.screens.AnalyticsRoute
 import com.lab03g10.smartpantry.ui.screens.BarcodeScanResultScreen
 import com.lab03g10.smartpantry.ui.screens.DashboardScreen
@@ -150,14 +149,36 @@ fun AppNavigation() {
                 SmartPantryBottomBar(
                     currentRoute = currentRoute,
                     onTabSelected = { route ->
+                        // Tap on the current tab → no-op. Without this guard,
+                        // repeated taps still execute the popUpTo+navigate
+                        // round-trip which can churn the back stack.
+                        if (route == currentRoute) return@SmartPantryBottomBar
+
+                        // Special-case Dashboard: wipe everything else off the
+                        // stack so Dashboard becomes the sole entry. Hardens
+                        // the tab against any back-stack state where Dashboard
+                        // was inadvertently popped — popUpTo(DASHBOARD) would
+                        // silently no-op there, and the old recipe could leave
+                        // Dashboard buried under other entries.
+                        if (route == Route.DASHBOARD) {
+                            navController.navigate(Route.DASHBOARD) {
+                                popUpTo(0) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                            return@SmartPantryBottomBar
+                        }
+
+                        // Other tabs: keep Dashboard at the bottom of the stack
+                        // (post-auth home) and preserve per-tab deep nav state.
                         navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            popUpTo(Route.DASHBOARD) {
                                 saveState = true
+                                inclusive = false
                             }
                             launchSingleTop = true
                             restoreState    = true
                         }
-                    },
+                    }
                 )
             }
         },
@@ -196,7 +217,8 @@ fun AppNavigation() {
                     onNavigateToNotifications  = { navController.navigate(Route.NOTIFICATIONS) },
                     onNavigateToExpiryCalendar = { navController.navigate(Route.EXPIRY_CALENDAR) },
                     onNavigateToProfile =  { navController.navigate(Route.PROFILE) },
-                    onNavigateToInventory = { navController.navigate(Route.INVENTORY_LIST) }
+                    onNavigateToInventory = { navController.navigate(Route.INVENTORY_LIST) },
+                    onNavigateToFoodDetail = { id -> navController.navigate(Route.foodDetail(id)) },
                 )
             }
             composable(Route.INVENTORY_LIST) {
@@ -213,7 +235,7 @@ fun AppNavigation() {
                 )
             }
             composable(Route.ANALYTICS) {
-                AnalyticsScreen(
+                AnalyticsRoute(
                     onNavigateToWasteLog = { navController.navigate(Route.WASTE_LOG) },
                 )
             }
@@ -284,7 +306,11 @@ fun AppNavigation() {
                 )
             }
             composable(Route.NOTIFICATIONS) {
-                NotificationsScreen(onNavigateBack = { navController.popBackStack() })
+                NotificationsScreen(
+                    onNavigateBack     = { navController.popBackStack() },
+                    onNavigateToFood   = { foodId -> navController.navigate(Route.foodDetail(foodId)) },
+                    onNavigateToSensor = { sensorId -> navController.navigate(Route.sensorDetail(sensorId)) },
+                )
             }
             composable(Route.WASTE_LOG) {
                 WasteLogRoute(
@@ -307,9 +333,11 @@ fun AppNavigation() {
                 route = Route.SENSOR_DETAIL,
                 arguments = listOf(navArgument("sensorId") { type = NavType.StringType })
             ) { backStackEntry ->
+                // sensorId still captured here for the navigate-to-edit lambda;
+                // SensorDetailViewModel itself reads the same value via
+                // SavedStateHandle, so no need to thread it through the screen.
                 val sensorId = backStackEntry.arguments?.getString("sensorId")
                 SensorDetailScreen(
-                    sensorId         = sensorId,
                     onNavigateBack   = { navController.popBackStack() },
                     onNavigateToEdit = { sensorId?.let { navController.navigate(Route.editSensor(it)) } },
                 )
@@ -317,10 +345,10 @@ fun AppNavigation() {
             composable(
                 route = Route.EDIT_SENSOR,
                 arguments = listOf(navArgument("sensorId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val sensorId = backStackEntry.arguments?.getString("sensorId")
+            ) {
+                // EditSensorViewModel reads sensorId via SavedStateHandle, so
+                // the screen doesn't need it threaded through as a param.
                 EditSensorScreen(
-                    sensorId       = sensorId,
                     onNavigateBack = { navController.popBackStack() },
                 )
             }

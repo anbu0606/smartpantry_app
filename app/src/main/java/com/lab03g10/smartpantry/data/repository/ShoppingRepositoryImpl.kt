@@ -29,4 +29,16 @@ class ShoppingRepositoryImpl @Inject constructor(
 
     override suspend fun toggle(id: String) =
         dao.toggle(id)
+
+    override suspend fun updateQuantity(id: String, quantity: String) =
+        dao.updateQuantity(id, quantity)
+
+    override suspend fun updateUnit(id: String, unit: String) =
+        dao.updateUnit(id, unit)
+
+    override suspend fun updateExpiry(id: String, nominalExpiryDate: Long) =
+        dao.updateExpiry(id, nominalExpiryDate)
+
+    override suspend fun updateStorage(id: String, storageLocationId: String?) =
+        dao.updateStorage(id, storageLocationId)
 }
