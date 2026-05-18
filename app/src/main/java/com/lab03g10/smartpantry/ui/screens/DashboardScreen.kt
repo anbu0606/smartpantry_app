@@ -82,6 +82,7 @@ private val ShortcutIcon   = Color(0xFF085041)
 // FoodItemEntity at render time so the screen doesn't leak entity coupling
 // into the card composable.
 private data class UrgencyItem(
+    val id: String,
     val emoji: String,
     val name: String,
     val badge: String,
@@ -103,7 +104,7 @@ private fun FoodItemEntity.toUrgencyItem(nowMillis: Long): UrgencyItem {
         "Frozen"    -> "🧊"
         else        -> "🥫"
     }
-    return UrgencyItem(emoji = emoji, name = name, badge = badge, isErrorBadge = daysLeft <= 0L)
+    return UrgencyItem(id = id, emoji = emoji, name = name, badge = badge, isErrorBadge = daysLeft <= 0L)
 }
 
 
@@ -132,6 +133,7 @@ fun DashboardScreen(
     onNavigateToExpiryCalendar: () -> Unit,
     onNavigateToProfile: () -> Unit,
     onNavigateToInventory: () -> Unit,
+    onNavigateToFoodDetail: (String) -> Unit,
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
@@ -252,6 +254,7 @@ fun DashboardScreen(
                 UseTodaySection(
                     items = state.useTodayItems,
                     onNavigateToInventory = onNavigateToInventory,
+                    onItemClick = onNavigateToFoodDetail,
                 )
             }
 
@@ -421,6 +424,7 @@ private fun DashboardTopBar(
 private fun UseTodaySection(
     items: List<FoodItemEntity>,
     onNavigateToInventory: () -> Unit,
+    onItemClick: (String) -> Unit,
 ) {
     val now = remember(items) { System.currentTimeMillis() }
     val urgencyItems = remember(items, now) { items.map { it.toUrgencyItem(now) } }
@@ -482,6 +486,7 @@ private fun UseTodaySection(
                         badge      = item.badge,
                         badgeColor = if (item.isErrorBadge) MaterialTheme.colorScheme.error
                                      else WarningAmber,
+                        onClick    = { onItemClick(item.id) },
                     )
                 }
             }
@@ -495,9 +500,12 @@ private fun UrgencyCard(
     name: String,
     badge: String,
     badgeColor: Color,
+    onClick: () -> Unit,
 ) {
     Surface(
-        modifier       = Modifier.size(width = 140.dp, height = 88.dp),
+        modifier       = Modifier
+            .size(width = 140.dp, height = 88.dp)
+            .clickable(onClick = onClick),
         shape          = RoundedCornerShape(16.dp),
         color          = MaterialTheme.colorScheme.surfaceContainerLowest,
         border         = BorderStroke(0.5.dp, CardBorder),

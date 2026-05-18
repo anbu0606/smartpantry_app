@@ -217,7 +217,8 @@ fun AppNavigation() {
                     onNavigateToNotifications  = { navController.navigate(Route.NOTIFICATIONS) },
                     onNavigateToExpiryCalendar = { navController.navigate(Route.EXPIRY_CALENDAR) },
                     onNavigateToProfile =  { navController.navigate(Route.PROFILE) },
-                    onNavigateToInventory = { navController.navigate(Route.INVENTORY_LIST) }
+                    onNavigateToInventory = { navController.navigate(Route.INVENTORY_LIST) },
+                    onNavigateToFoodDetail = { id -> navController.navigate(Route.foodDetail(id)) },
                 )
             }
             composable(Route.INVENTORY_LIST) {
