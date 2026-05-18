@@ -291,7 +291,11 @@ fun AppNavigation() {
                 )
             }
             composable(Route.NOTIFICATIONS) {
-                NotificationsScreen(onNavigateBack = { navController.popBackStack() })
+                NotificationsScreen(
+                    onNavigateBack     = { navController.popBackStack() },
+                    onNavigateToFood   = { foodId -> navController.navigate(Route.foodDetail(foodId)) },
+                    onNavigateToSensor = { sensorId -> navController.navigate(Route.sensorDetail(sensorId)) },
+                )
             }
             composable(Route.WASTE_LOG) {
                 WasteLogRoute(
