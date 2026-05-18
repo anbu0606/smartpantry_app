@@ -326,10 +326,10 @@ fun AppNavigation() {
             composable(
                 route = Route.EDIT_SENSOR,
                 arguments = listOf(navArgument("sensorId") { type = NavType.StringType })
-            ) { backStackEntry ->
-                val sensorId = backStackEntry.arguments?.getString("sensorId")
+            ) {
+                // EditSensorViewModel reads sensorId via SavedStateHandle, so
+                // the screen doesn't need it threaded through as a param.
                 EditSensorScreen(
-                    sensorId       = sensorId,
                     onNavigateBack = { navController.popBackStack() },
                 )
             }
