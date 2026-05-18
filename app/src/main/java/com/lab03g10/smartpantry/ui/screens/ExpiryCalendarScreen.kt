@@ -35,9 +35,6 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -45,7 +42,13 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.CalendarDayCell
+import com.lab03g10.smartpantry.ui.viewmodel.ExpiryCalendarViewModel
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 // Colors
 private val ExpiredGrey  = Color(0xFF9E9E9E)
@@ -60,43 +63,18 @@ private val SafeGreen    = Color(0xFF2E7D32)
 private val SafeGreenBg  = Color(0xFFE8F5E9)
 private val TodayGreen   = Color(0xFF0F6E56)
 
-// data model
-private data class ExpiryEvent(
-    val foodName: String,
-    val category: String,
-)
-
-// Key = day of month
-private val aprilExpiryMap: Map<Int, List<ExpiryEvent>> = mapOf(
-    17 to listOf(ExpiryEvent("Butter", "Dairy")),               // already expire
-    18 to listOf(ExpiryEvent("Full Cream Milk", "Dairy")),      // already expired
-    19 to listOf(ExpiryEvent("Baby Spinach", "Produce")),       // already expired
-    22 to listOf(
-        ExpiryEvent("Cheddar Cheese", "Dairy"),
-        ExpiryEvent("Carrots", "Produce"),
-    ),                                                           // today
-    23 to listOf(ExpiryEvent("Chicken Breast", "Meat")),        // 1 day
-    27 to listOf(ExpiryEvent("Basmati Rice", "Dry Goods")),     // 5 days
-    30 to listOf(ExpiryEvent("Orange Juice", "Beverages")),     // 8 days
-)
-
-private const val TODAY_DAY = 22  // April 22 - "today"
-
-// April 2026 calendar grid
-private val aprilWeeks: List<List<Int?>> = listOf(
-    listOf(null, null, 1,    2,    3,    4,    5   ),
-    listOf(6,    7,    8,    9,    10,   11,   12  ),
-    listOf(13,   14,   15,   16,   17,   18,   19  ),
-    listOf(20,   21,   22,   23,   24,   25,   26  ),
-    listOf(27,   28,   29,   30,   null, null, null),
-)
+private val MonthHeaderFmt   = DateTimeFormatter.ofPattern("MMMM yyyy", Locale.ENGLISH)
+private val PanelHeaderFmt   = DateTimeFormatter.ofPattern("MMMM d 'ITEMS'", Locale.ENGLISH)
+private val EmptyPanelFmt    = DateTimeFormatter.ofPattern("MMMM d", Locale.ENGLISH)
 
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
-
-    var selectedDay by remember { mutableStateOf<Int?>(22) }
+fun ExpiryCalendarScreen(
+    onNavigateBack: () -> Unit,
+    viewModel: ExpiryCalendarViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
 
     Scaffold(
         topBar = {
@@ -139,7 +117,7 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment     = Alignment.CenterVertically,
             ) {
-                IconButton(onClick = {}) {
+                IconButton(onClick = viewModel::onPrevMonth) {
                     Icon(
                         imageVector        = Icons.Filled.ChevronLeft,
                         contentDescription = "Previous month",
@@ -147,13 +125,13 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                     )
                 }
                 Text(
-                    text  = "April 2026",
+                    text  = state.displayedMonth.format(MonthHeaderFmt),
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold,
                     ),
                     color = MaterialTheme.colorScheme.onSurface,
                 )
-                IconButton(onClick = {}) {
+                IconButton(onClick = viewModel::onNextMonth) {
                     Icon(
                         imageVector        = Icons.Filled.ChevronRight,
                         contentDescription = "Next month",
@@ -162,7 +140,7 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                 }
             }
 
-            // Day of week header row
+            // Day of week header row — Monday-first to match ViewModel grid.
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -185,31 +163,27 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
             }
 
             // Calendar grid
+            val selectedDayNum = state.selectedDay?.dayOfMonth
             Column(
                 modifier            = Modifier.padding(horizontal = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp),
             ) {
-                aprilWeeks.forEach { week ->
+                state.weeks.forEach { week ->
                     Row(
                         modifier              = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(2.dp),
                     ) {
-                        week.forEach { day ->
+                        week.forEach { cell ->
                             Box(
                                 modifier = Modifier
                                     .weight(1f)
                                     .aspectRatio(1f),
                             ) {
-                                if (day != null) {
-                                    val events   = aprilExpiryMap[day] ?: emptyList()
-                                    val isToday  = day == TODAY_DAY
-                                    val isSelected = day == selectedDay
+                                if (cell != null) {
                                     DayCell(
-                                        day        = day,
-                                        isSelected = isSelected,
-                                        isToday    = isToday,
-                                        events     = events,
-                                        onClick    = { selectedDay = day },
+                                        cell       = cell,
+                                        isSelected = cell.dayOfMonth == selectedDayNum,
+                                        onClick    = { viewModel.onDayTap(cell.dayOfMonth) },
                                     )
                                 }
                             }
@@ -239,12 +213,13 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                     LegendItem(color = ExpiredGrey,  label = "Expired")
                 }
 
-                // selected day detail panel
+                // selected day detail panel — driven by state.selectedDay rather
+                // than the previous hardcoded aprilExpiryMap lookup.
                 Spacer(modifier = Modifier.height(12.dp))
 
-                if (selectedDay != null) {
-                    val events = aprilExpiryMap[selectedDay]
-                    if (events != null) {
+                val selected = state.selectedDay
+                if (selected != null) {
+                    if (selected.events.isNotEmpty()) {
                         ElevatedCard(
                             shape  = RoundedCornerShape(16.dp),
                             colors = CardDefaults.elevatedCardColors(
@@ -257,7 +232,7 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                         ) {
                             Column(modifier = Modifier.padding(16.dp)) {
                                 Text(
-                                    text  = "APRIL $selectedDay ITEMS",
+                                    text  = selected.date.format(PanelHeaderFmt).uppercase(Locale.ENGLISH),
                                     style = MaterialTheme.typography.labelSmall.copy(
                                         fontWeight    = FontWeight.Medium,
                                         letterSpacing = 1.sp,
@@ -266,14 +241,14 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                                 )
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                    events.forEach { event ->
+                                    selected.events.forEach { food ->
                                         Row(
                                             modifier              = Modifier.fillMaxWidth(),
                                             horizontalArrangement = Arrangement.SpaceBetween,
                                             verticalAlignment     = Alignment.CenterVertically,
                                         ) {
                                             Text(
-                                                text  = event.foodName,
+                                                text  = food.name,
                                                 style = MaterialTheme.typography.bodyMedium.copy(
                                                     fontWeight = FontWeight.Medium,
                                                 ),
@@ -284,7 +259,7 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                                                 color = MaterialTheme.colorScheme.secondaryContainer,
                                             ) {
                                                 Text(
-                                                    text     = event.category,
+                                                    text     = food.category,
                                                     style    = MaterialTheme.typography.labelSmall,
                                                     color    = MaterialTheme.colorScheme.onSecondaryContainer,
                                                     modifier = Modifier.padding(
@@ -300,7 +275,7 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
                         }
                     } else {
                         Text(
-                            text     = "No items expiring on April $selectedDay",
+                            text     = "No items expiring on ${selected.date.format(EmptyPanelFmt)}",
                             style    = MaterialTheme.typography.bodySmall,
                             color    = MaterialTheme.colorScheme.onSurfaceVariant,
                             modifier = Modifier.padding(16.dp),
@@ -319,31 +294,16 @@ fun ExpiryCalendarScreen(onNavigateBack: () -> Unit) {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun DayCell(
-    day: Int,
+    cell: CalendarDayCell,
     isSelected: Boolean,
-    isToday: Boolean,
-    events: List<ExpiryEvent>,
     onClick: () -> Unit,
 ) {
-    // determine dot color based on urgency
-    val dotColor: Color = when {
-        events.isEmpty()      -> Color.Transparent
-        day < TODAY_DAY       -> ExpiredGrey
-        day == TODAY_DAY      -> TodayGreen
-        else                  -> {
-            val diff = day - TODAY_DAY
-            when (diff) {
-                in 1..3  -> UrgentRed
-                in 4..7  -> WarnOrange
-                else          -> SafeGreen
-            }
-        }
-    }
+    val dotColor: Color = cell.mostUrgentColor ?: Color.Transparent
 
     val bgColor: Color = when {
-        isSelected -> MaterialTheme.colorScheme.primaryContainer
-        isToday    -> TodayGreen.copy(alpha = 0.12f)
-        else       -> Color.Transparent
+        isSelected   -> MaterialTheme.colorScheme.primaryContainer
+        cell.isToday -> TodayGreen.copy(alpha = 0.12f)
+        else         -> Color.Transparent
     }
 
     val border: BorderStroke? = if (isSelected) {
@@ -353,9 +313,9 @@ private fun DayCell(
     }
 
     val textColor: Color = when {
-        isSelected -> MaterialTheme.colorScheme.onPrimaryContainer
-        isToday    -> TodayGreen
-        else       -> MaterialTheme.colorScheme.onSurface
+        isSelected   -> MaterialTheme.colorScheme.onPrimaryContainer
+        cell.isToday -> TodayGreen
+        else         -> MaterialTheme.colorScheme.onSurface
     }
 
     Surface(
@@ -373,19 +333,21 @@ private fun DayCell(
             verticalArrangement = Arrangement.Center,
         ) {
             Text(
-                text  = day.toString(),
+                text  = cell.dayOfMonth.toString(),
                 style = MaterialTheme.typography.bodySmall.copy(
                     fontWeight = FontWeight.Medium,
                 ),
                 color = textColor,
             )
-            if (events.isNotEmpty()) {
+            if (cell.events.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(2.dp))
                 Row(
                     horizontalArrangement = Arrangement.spacedBy(2.dp),
                     verticalAlignment     = Alignment.CenterVertically,
                 ) {
-                    events.take(3).forEach { _ ->
+                    // Up to 3 dots, all in the most-urgent colour (matches A2
+                    // visual rhythm but driven by the real food list).
+                    repeat(cell.events.size.coerceAtMost(3)) {
                         Box(
                             modifier = Modifier
                                 .size(4.dp)
@@ -424,7 +386,7 @@ private fun LegendItem(color: Color, label: String) {
 @Composable
 private fun PreviewExpiryCalendarLight() {
     SmartPantryTheme {
-        ExpiryCalendarScreen(onNavigateBack = {})
+        Text("Expiry-calendar preview uses live app data at runtime.")
     }
 }
 
@@ -437,6 +399,6 @@ private fun PreviewExpiryCalendarLight() {
 @Composable
 private fun PreviewExpiryCalendarDark() {
     SmartPantryTheme(darkTheme = true) {
-        ExpiryCalendarScreen(onNavigateBack = {})
+        Text("Expiry-calendar preview uses live app data at runtime.")
     }
 }
