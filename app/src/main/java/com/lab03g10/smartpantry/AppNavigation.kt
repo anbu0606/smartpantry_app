@@ -151,13 +151,20 @@ fun AppNavigation() {
                     currentRoute = currentRoute,
                     onTabSelected = { route ->
                         navController.navigate(route) {
-                            popUpTo(navController.graph.findStartDestination().id) {
+                            // Bottom-nav semantic: every tab pops back to Dashboard (the post-auth home),
+                            // saves the leaving tab's state, and dedupes if we're already on the target.
+                            // Hardcoded to Route.DASHBOARD rather than findStartDestination() because the
+                            // graph's startDestination is LOGIN initially (pre-auth) and can leak into
+                            // post-auth navigation, causing the popUpTo target to be a non-existent
+                            // back-stack entry → silent navigate cancellation.
+                            popUpTo(Route.DASHBOARD) {
                                 saveState = true
+                                inclusive = false   // keep Dashboard on the stack as the bottom-nav home
                             }
                             launchSingleTop = true
                             restoreState    = true
                         }
-                    },
+                    }
                 )
             }
         },
