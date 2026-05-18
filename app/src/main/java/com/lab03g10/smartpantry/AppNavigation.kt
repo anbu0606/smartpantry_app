@@ -314,9 +314,11 @@ fun AppNavigation() {
                 route = Route.SENSOR_DETAIL,
                 arguments = listOf(navArgument("sensorId") { type = NavType.StringType })
             ) { backStackEntry ->
+                // sensorId still captured here for the navigate-to-edit lambda;
+                // SensorDetailViewModel itself reads the same value via
+                // SavedStateHandle, so no need to thread it through the screen.
                 val sensorId = backStackEntry.arguments?.getString("sensorId")
                 SensorDetailScreen(
-                    sensorId         = sensorId,
                     onNavigateBack   = { navController.popBackStack() },
                     onNavigateToEdit = { sensorId?.let { navController.navigate(Route.editSensor(it)) } },
                 )

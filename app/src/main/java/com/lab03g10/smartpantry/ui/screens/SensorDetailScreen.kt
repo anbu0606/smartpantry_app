@@ -18,8 +18,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.Settings
+import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Thermostat
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -52,8 +54,18 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lab03g10.smartpantry.data.local.entity.NotificationEntity
+import com.lab03g10.smartpantry.data.local.entity.SensorReadingEntity
+import com.lab03g10.smartpantry.domain.model.EnvironmentType
+import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.SensorDetailViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // chart colour
 private val NormalGreen     = Color(0xFF2E7D32)
@@ -64,44 +76,50 @@ private val GridLine        = Color(0xFFE0E0E0)
 
 private val SectionGreen = Color(0xFF0F6E56)
 
-// chart data - temperature
-private val weekReadings    = floatArrayOf(22.5f, 23.0f, 24.5f, 25.0f, 25.5f, 29.5f, 26.5f)
-private const val weekThreshold = 28.0f
-private const val weekChartMin  = 18.0f
-private const val weekChartMax  = 35.0f
+// Display formatters — JVM-local TZ (gap-closure-checklist §10.2).
+private val chartAxisFmt   = SimpleDateFormat("MMM dd", Locale.ENGLISH)
+private val alertTimeFmt   = SimpleDateFormat("dd MMM yyyy, HH:mm", Locale.ENGLISH)
+private val pairedDateFmt  = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
 
-// chart data - humidity
-private val weekHumidityReadings  = floatArrayOf(60f, 62f, 63f, 64f, 63f, 72f, 66f)
-private const val weekHumidityThreshold = 70f
-private const val weekHumidityMin  = 40f
-private const val weekHumidityMax  = 100f
-
-// chart data
-private val weekLuxReadings       = floatArrayOf(220f, 240f, 250f, 280f, 285f, 420f, 290f)
-private const val weekLuxThreshold = 400f
-private const val weekLuxMin       = 0f
-private const val weekLuxMax       = 500f
+// Humidity is always reported as a percentage; lux/temperature bounds are
+// derived from the data + the sensor's configured thresholds.
+private const val HUMIDITY_THRESHOLD = 70f
+private const val HUMIDITY_MIN       = 0f
+private const val HUMIDITY_MAX       = 100f
 
 
 /**
  * Detail screen for a single paired sensor, showing current readings, a 7-day
- * history chart (temperature, humidity, or light)
+ * history chart (temperature, humidity, or light), and the alert history
+ * filtered to this sensor.
+ *
+ * Driven by [SensorDetailViewModel] which reads `sensorId` from the nav arg
+ * via SavedStateHandle, so the screen no longer needs that parameter.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SensorDetailScreen(
-    sensorId: String? = null,
     onNavigateBack: () -> Unit,
     onNavigateToEdit: () -> Unit,
+    viewModel: SensorDetailViewModel = hiltViewModel(),
 ) {
+    val state by viewModel.state.collectAsStateWithLifecycle()
     var selectedChartTab by remember { mutableIntStateOf(0) }
+
+    val config        = state.sensorConfig
+    val readings      = state.recentReadings
+    val latest        = readings.lastOrNull()
+    val environment   = config?.environmentType?.let { name ->
+        runCatching { EnvironmentType.valueOf(name) }.getOrNull()
+    }
+    val title = config?.displayName ?: if (state.isLoading) "Loading…" else "Sensor"
 
     Scaffold(
         topBar = {
             TopAppBar(
                 title = {
                     Text(
-                        text  = "Pantry Sensor",
+                        text  = title,
                         style = MaterialTheme.typography.titleLarge.copy(
                             fontWeight = FontWeight.Normal,
                         ),
@@ -131,6 +149,27 @@ fun SensorDetailScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
+        if (state.isLoading && config == null) {
+            Box(
+                modifier = Modifier
+                    .padding(innerPadding)
+                    .fillMaxWidth(),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(modifier = Modifier.padding(top = 48.dp))
+            }
+            return@Scaffold
+        }
+        if (config == null) {
+            EmptyState(
+                icon           = Icons.Outlined.Thermostat,
+                title          = "Sensor not found",
+                supportingText = "This sensor may have been removed. Pair a new one from the Dashboard.",
+                modifier       = Modifier.padding(innerPadding),
+            )
+            return@Scaffold
+        }
+
         LazyColumn(
             modifier            = Modifier.padding(innerPadding),
             contentPadding      = PaddingValues(start = 16.dp, end = 16.dp, top = 20.dp, bottom = 32.dp),
@@ -140,11 +179,12 @@ fun SensorDetailScreen(
             //current readings
             item {
                 TemperatureCard(
-                    locationName = "Pantry",
-                    temperature  = 26.5f,
-                    humidity     = 63f,
-                    lux          = 285f,
-                    isNormal     = false,
+                    locationName = config.displayName,
+                    temperature  = latest?.temperatureC ?: 0f,
+                    humidity     = latest?.humidity ?: 0f,
+                    lux          = latest?.lux ?: 0f,
+                    // breachFlag 0 = clean; null reading shows as normal placeholder.
+                    isNormal     = (latest?.breachFlag ?: 0) == 0,
                 )
             }
 
@@ -160,13 +200,13 @@ fun SensorDetailScreen(
                     },
                 ) {
                     listOf("🌡 Temperature", "💧 Humidity", "☀ Light")
-                        .forEachIndexed { index, title ->
+                        .forEachIndexed { index, label ->
                             Tab(
                                 selected = selectedChartTab == index,
                                 onClick  = { selectedChartTab = index },
                                 text     = {
                                     Text(
-                                        text  = title,
+                                        text  = label,
                                         style = MaterialTheme.typography.labelMedium,
                                     )
                                 },
@@ -191,121 +231,31 @@ fun SensorDetailScreen(
                     color = SectionGreen,
                 )
             }
+
+            // Chart card OR empty state (a freshly-paired sensor has no readings yet).
             item {
-                val thresholdLabel = when (selectedChartTab) {
-                    0    -> "${weekThreshold.toInt()}°C"
-                    1    -> "${weekHumidityThreshold.toInt()}%"
-                    else -> "${weekLuxThreshold.toInt()} lx"
-                }
-                val thresholdSubtitle = when (selectedChartTab) {
-                    0    -> "Alert threshold: ${weekThreshold.toInt()}°C"
-                    1    -> "Alert threshold: ${weekHumidityThreshold.toInt()}%"
-                    else -> "Alert threshold: ${weekLuxThreshold.toInt()} lx"
-                }
-                val activeThreshold = when (selectedChartTab) {
-                    0    -> weekThreshold
-                    1    -> weekHumidityThreshold
-                    else -> weekLuxThreshold
-                }
-                val activeChartMin = when (selectedChartTab) {
-                    0    -> weekChartMin
-                    1    -> weekHumidityMin
-                    else -> weekLuxMin
-                }
-                val activeChartMax = when (selectedChartTab) {
-                    0    -> weekChartMax
-                    1    -> weekHumidityMax
-                    else -> weekLuxMax
-                }
-                val thresholdFraction =
-                    1f - (activeThreshold - activeChartMin) / (activeChartMax - activeChartMin)
-
-                ElevatedCard(
-                    modifier  = Modifier.fillMaxWidth(),
-                    shape     = RoundedCornerShape(16.dp),
-                    colors    = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    ),
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
-                ) {
-                    Column(
-                        modifier            = Modifier.padding(20.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                if (readings.isEmpty()) {
+                    ElevatedCard(
+                        modifier  = Modifier.fillMaxWidth(),
+                        shape     = RoundedCornerShape(16.dp),
+                        colors    = CardDefaults.elevatedCardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                        ),
+                        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
                     ) {
-                        Text(
-                            text  = "Temperature trend — last 7 days",
-                            style = MaterialTheme.typography.titleSmall.copy(
-                                fontWeight = FontWeight.Medium,
-                            ),
-                            color = MaterialTheme.colorScheme.onSurface,
+                        EmptyState(
+                            icon           = Icons.Outlined.ShowChart,
+                            title          = "No readings yet",
+                            supportingText = "Once the next sensor tick fires, the 7-day chart will populate here.",
                         )
-
-                        Spacer(Modifier.height(4.dp))
-
-                        Text(
-                            text  = thresholdSubtitle,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-
-                        Spacer(Modifier.height(12.dp))
-
-                        // chart overlay
-                        Box(modifier = Modifier.fillMaxWidth()) {
-                            when (selectedChartTab) {
-                                0    -> SevenDayChart(
-                                    readings  = weekReadings,
-                                    chartMin  = weekChartMin,
-                                    chartMax  = weekChartMax,
-                                    threshold = weekThreshold,
-                                    modifier  = Modifier.fillMaxWidth(),
-                                )
-                                1    -> SevenDayChart(
-                                    readings  = weekHumidityReadings,
-                                    chartMin  = weekHumidityMin,
-                                    chartMax  = weekHumidityMax,
-                                    threshold = weekHumidityThreshold,
-                                    modifier  = Modifier.fillMaxWidth(),
-                                )
-                                else -> SevenDayChart(
-                                    readings  = weekLuxReadings,
-                                    chartMin  = weekLuxMin,
-                                    chartMax  = weekLuxMax,
-                                    threshold = weekLuxThreshold,
-                                    modifier  = Modifier.fillMaxWidth(),
-                                )
-                            }
-
-                            Text(
-                                text     = thresholdLabel,
-                                style    = MaterialTheme.typography.labelSmall.copy(
-                                    fontWeight = FontWeight.Bold,
-                                    fontSize   = 9.sp,
-                                ),
-                                color    = ThresholdOrange,
-                                modifier = Modifier.padding(top = (160.dp * thresholdFraction - 8.dp)),
-                            )
-                        }
-
-                        Spacer(Modifier.height(8.dp))
-
-                        // x-axis
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            listOf(
-                                "Apr 17", "Apr 18", "Apr 19", "Apr 20",
-                                "Apr 21", "Apr 22", "Apr 23",
-                            ).forEach { label ->
-                                Text(
-                                    text  = label,
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                )
-                            }
-                        }
                     }
+                } else {
+                    ChartCard(
+                        readings        = readings,
+                        thresholdC      = config.thresholdC,
+                        maxLux          = config.maxLux,
+                        selectedTab     = selectedChartTab,
+                    )
                 }
             }
 
@@ -332,33 +282,32 @@ fun SensorDetailScreen(
                     val dividerColor =
                         MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
 
-                    Column(
-                        modifier            = Modifier.fillMaxWidth(),
-                        verticalArrangement = Arrangement.spacedBy(0.dp),
-                    ) {
-                        AlertHistoryRow(
-                            title       = "Temperature Spike",
-                            description = "Reached 29.5 °C",
-                            timestamp   = "22 Apr 2026, 20:00",
+                    if (state.alertHistory.isEmpty()) {
+                        EmptyState(
+                            icon           = Icons.Outlined.Thermostat,
+                            title          = "No alerts logged",
+                            supportingText = "Breach events for this sensor will appear here.",
+                            compact        = true,
                         )
-                        HorizontalDivider(
-                            thickness = 0.5.dp,
-                            color     = dividerColor,
-                        )
-                        AlertHistoryRow(
-                            title       = "Temperature Spike",
-                            description = "Reached 29.0 °C",
-                            timestamp   = "18 Apr 2026, 15:30",
-                        )
-                        HorizontalDivider(
-                            thickness = 0.5.dp,
-                            color     = dividerColor,
-                        )
-                        AlertHistoryRow(
-                            title       = "Temperature Spike",
-                            description = "Reached 28.5 °C",
-                            timestamp   = "10 Apr 2026, 11:00",
-                        )
+                    } else {
+                        Column(
+                            modifier            = Modifier.fillMaxWidth(),
+                            verticalArrangement = Arrangement.spacedBy(0.dp),
+                        ) {
+                            state.alertHistory.forEachIndexed { index, notif ->
+                                AlertHistoryRow(
+                                    title       = notif.title,
+                                    description = notif.body,
+                                    timestamp   = alertTimeFmt.format(Date(notif.createdAt)),
+                                )
+                                if (index < state.alertHistory.lastIndex) {
+                                    HorizontalDivider(
+                                        thickness = 0.5.dp,
+                                        color     = dividerColor,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -386,18 +335,154 @@ fun SensorDetailScreen(
                     val dividerColor =
                         MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.40f)
 
-                    DetailRow(label = "Device ID",        value = "TempHumid-B891")
-                    HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
-                    DetailRow(label = "Environment",      value = "🌡 Pantry")
-                    HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
-                    DetailRow(label = "Alert Threshold",  value = "28 °C")
-                    HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
-                    DetailRow(label = "Paired On",        value = "5 Apr 2026")
+                    DetailRow(label = "Device ID",        value = config.deviceId)
                     HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
                     DetailRow(
-                        label      = "Battery",
-                        value      = "78%",
-                        valueColor = Color(0xFF2E7D32),   // battery ≥ 50 %
+                        label = "Environment",
+                        value = environment?.let { "${it.emoji} ${it.label}" } ?: config.environmentType,
+                    )
+                    HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+                    DetailRow(label = "Alert Threshold",  value = "${config.thresholdC.toInt()} °C")
+                    HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+                    DetailRow(label = "Max Light",        value = "${config.maxLux.toInt()} lx")
+                    HorizontalDivider(thickness = 0.5.dp, color = dividerColor)
+                    DetailRow(
+                        label = "Paired On",
+                        value = pairedDateFmt.format(Date(config.pairedAt)),
+                    )
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Shared chart card — derives series, threshold, and y-axis bounds for the
+ * selected metric from the real reading list.
+ */
+@Composable
+private fun ChartCard(
+    readings: List<SensorReadingEntity>,
+    thresholdC: Float,
+    maxLux: Float,
+    selectedTab: Int,
+) {
+    val series: FloatArray
+    val threshold: Float
+    val chartMin: Float
+    val chartMax: Float
+    val title: String
+    val thresholdLabel: String
+    val thresholdSubtitle: String
+
+    when (selectedTab) {
+        1 -> {
+            series          = readings.map { it.humidity }.toFloatArray()
+            threshold       = HUMIDITY_THRESHOLD
+            chartMin        = HUMIDITY_MIN
+            chartMax        = HUMIDITY_MAX
+            title           = "Humidity trend — last 7 days"
+            thresholdLabel  = "${threshold.toInt()}%"
+            thresholdSubtitle = "Alert threshold: $thresholdLabel"
+        }
+        2 -> {
+            series          = readings.map { it.lux }.toFloatArray()
+            threshold       = maxLux
+            chartMin        = 0f
+            // Make sure the threshold line and the observed peak both fit.
+            chartMax        = maxOf(maxLux * 1.5f, series.maxOrNull() ?: 0f) + 1f
+            title           = "Light trend — last 7 days"
+            thresholdLabel  = "${threshold.toInt()} lx"
+            thresholdSubtitle = "Alert threshold: $thresholdLabel"
+        }
+        else -> {
+            series          = readings.map { it.temperatureC }.toFloatArray()
+            threshold       = thresholdC
+            // Wrap the data range around the threshold with at least ±3 °C padding.
+            val seriesMin   = series.minOrNull() ?: thresholdC
+            val seriesMax   = series.maxOrNull() ?: thresholdC
+            chartMin        = minOf(seriesMin, thresholdC) - 3f
+            chartMax        = maxOf(seriesMax, thresholdC) + 3f
+            title           = "Temperature trend — last 7 days"
+            thresholdLabel  = "${threshold.toInt()}°C"
+            thresholdSubtitle = "Alert threshold: $thresholdLabel"
+        }
+    }
+    val thresholdFraction =
+        1f - (threshold - chartMin) / (chartMax - chartMin)
+
+    ElevatedCard(
+        modifier  = Modifier.fillMaxWidth(),
+        shape     = RoundedCornerShape(16.dp),
+        colors    = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier            = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            Text(
+                text  = title,
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Medium),
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+
+            Spacer(Modifier.height(4.dp))
+
+            Text(
+                text  = thresholdSubtitle,
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+
+            Spacer(Modifier.height(12.dp))
+
+            // chart overlay
+            Box(modifier = Modifier.fillMaxWidth()) {
+                SevenDayChart(
+                    readings  = series,
+                    chartMin  = chartMin,
+                    chartMax  = chartMax,
+                    threshold = threshold,
+                    modifier  = Modifier.fillMaxWidth(),
+                )
+
+                Text(
+                    text     = thresholdLabel,
+                    style    = MaterialTheme.typography.labelSmall.copy(
+                        fontWeight = FontWeight.Bold,
+                        fontSize   = 9.sp,
+                    ),
+                    color    = ThresholdOrange,
+                    modifier = Modifier.padding(top = (160.dp * thresholdFraction - 8.dp)),
+                )
+            }
+
+            Spacer(Modifier.height(8.dp))
+
+            // x-axis — pick up to 7 evenly-spaced timestamps from the data.
+            val xLabels = remember(readings) {
+                if (readings.isEmpty()) emptyList()
+                else {
+                    val target = minOf(7, readings.size)
+                    val step = (readings.size - 1).coerceAtLeast(1).toFloat() / (target - 1).coerceAtLeast(1)
+                    (0 until target).map { i ->
+                        val idx = (i * step).toInt().coerceAtMost(readings.lastIndex)
+                        chartAxisFmt.format(Date(readings[idx].timestamp))
+                    }
+                }
+            }
+            Row(
+                modifier              = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+            ) {
+                xLabels.forEach { label ->
+                    Text(
+                        text  = label,
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
             }
@@ -410,7 +495,7 @@ fun SensorDetailScreen(
 /**
  * 7-day line chart rendered on a Canvas
  *
- * @param readings   Array of exactly 7 float values
+ * @param readings   Series of float values; >= 1 element required by the caller.
  * @param chartMin   Y-axis minimum value
  * @param chartMax   Y-axis maximum value
  * @param threshold  Value at which the line colour switches from green to red.
@@ -423,7 +508,7 @@ private fun SevenDayChart(
     threshold: Float,
     modifier:  Modifier = Modifier,
 ) {
-    val dataRange  = chartMax - chartMin
+    val dataRange  = (chartMax - chartMin).coerceAtLeast(1f)
     val spikeIndex = readings.indexOfFirst { it > threshold }
     val hasSpike   = spikeIndex >= 0
     val count      = readings.size
@@ -435,7 +520,8 @@ private fun SevenDayChart(
             .drawWithCache {
                 val w     = size.width
                 val h     = size.height
-                val stepX = w / (count - 1).toFloat()
+                // Single-point series: collapse stepX so the dot anchors at x=0.
+                val stepX = if (count > 1) w / (count - 1).toFloat() else 0f
 
                 fun valueToY(v: Float) = h * (1f - (v - chartMin) / dataRange)
                 fun xAt(i: Int)        = i * stepX
@@ -605,10 +691,7 @@ private fun DetailRow(
 @Composable
 private fun PreviewSensorDetailLight() {
     SmartPantryTheme {
-        SensorDetailScreen(
-            onNavigateBack   = {},
-            onNavigateToEdit = {},
-        )
+        Text("Sensor detail preview uses live app data at runtime.")
     }
 }
 
@@ -621,9 +704,6 @@ private fun PreviewSensorDetailLight() {
 @Composable
 private fun PreviewSensorDetailDark() {
     SmartPantryTheme(darkTheme = true) {
-        SensorDetailScreen(
-            onNavigateBack   = {},
-            onNavigateToEdit = {},
-        )
+        Text("Sensor detail preview uses live app data at runtime.")
     }
 }
