@@ -133,6 +133,7 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsStateWithLifecycle()
+    val userInitial by viewModel.userInitial.collectAsStateWithLifecycle()
     val pageCount      = state.sensorCards.size + 1
     val pagerState     = rememberPagerState(pageCount = { pageCount })
     val coroutineScope = rememberCoroutineScope()
@@ -142,6 +143,7 @@ fun DashboardScreen(
         topBar         = {
             DashboardTopBar(
                 unreadCount = state.unreadNotificationCount,
+                userInitial = userInitial,
                 onNavigateToNotifications = onNavigateToNotifications,
                 onNavigateToProfile = onNavigateToProfile,
             )
@@ -329,6 +331,7 @@ private fun TimeGreeting(
 @Composable
 private fun DashboardTopBar(
     unreadCount: Int,
+    userInitial: String,
     onNavigateToNotifications: () -> Unit,
     onNavigateToProfile: () -> Unit) {
     CenterAlignedTopAppBar(
@@ -375,7 +378,7 @@ private fun DashboardTopBar(
                 contentAlignment = Alignment.Center,
             ) {
                 Text(
-                    text  = "A",
+                    text  = userInitial,
                     style = MaterialTheme.typography.labelMedium.copy(
                         fontWeight = FontWeight.Bold,
                     ),

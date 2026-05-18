@@ -4,8 +4,10 @@ package com.lab03g10.smartpantry.ui.viewmodel
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
+import com.lab03g10.smartpantry.domain.repo.AuthRepository
 import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.NotificationRepository
+import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
@@ -53,7 +55,32 @@ class DashboardViewModel @Inject constructor(
     private val foodRepository: FoodRepository,
     private val sensorRepository: SensorRepository,
     private val notificationRepository: NotificationRepository,
+    authRepository: AuthRepository,
+    preferenceRepository: PreferenceRepository,
 ) : ViewModel() {
+
+    /**
+     * First letter shown on the Dashboard top-bar avatar. Source order:
+     *   1. User's preferred display name (`PreferenceRepository.observeUserName`)
+     *   2. Firebase account displayName
+     *   3. Firebase account email (first letter)
+     *   4. "?" placeholder while everything is still null/blank
+     *
+     * Kept as a sibling StateFlow rather than folded into `state` because the
+     * main combine is already at 5 arms and the avatar updates are independent
+     * of the dashboard's food / sensor / notification streams.
+     */
+    val userInitial: StateFlow<String> = combine(
+        authRepository.observeCurrentUser(),
+        preferenceRepository.observeUserName(),
+    ) { firebaseUser, prefName ->
+        val name = prefName.takeIf { it.isNotBlank() }
+            ?: firebaseUser?.displayName?.takeIf { it.isNotBlank() }
+            ?: firebaseUser?.email
+            ?: ""
+        name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "?")
+
     val state: StateFlow<DashboardUiState> = combine(
         foodRepository.observeUseToday(today = endOfTodayMillis()),
         sensorRepository.observeConfigs(),
