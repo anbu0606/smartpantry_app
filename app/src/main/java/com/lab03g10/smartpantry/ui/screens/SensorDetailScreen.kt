@@ -47,9 +47,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.PathEffect
-import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
@@ -551,34 +549,24 @@ private fun SevenDayChart(
                         pathEffect  = PathEffect.dashPathEffect(floatArrayOf(12f, 8f)),
                     )
 
-                    val normalEndIdx = if (hasSpike) spikeIndex else count - 1
-                    if (normalEndIdx >= 1) {
-                        val normalPath = Path().apply {
-                            moveTo(pts[0].x, pts[0].y)
-                            for (i in 1..normalEndIdx) {
-                                lineTo(pts[i].x, pts[i].y)
-                            }
+                    // Per-segment colouring against the actual values, so a
+                    // sawtooth crossing the threshold paints each breach run
+                    // red without staining the safe stretches. See
+                    // SensorLineChart for the same fix.
+                    if (count >= 2) {
+                        for (i in 0 until count - 1) {
+                            val segIsBreach = readings[i] > threshold
+                                || readings[i + 1] > threshold
+                            drawLine(
+                                color       = if (segIsBreach) AlertRed else NormalGreen,
+                                start       = pts[i],
+                                end         = pts[i + 1],
+                                strokeWidth = 2.5f,
+                            )
                         }
-                        drawPath(
-                            path  = normalPath,
-                            color = NormalGreen,
-                            style = Stroke(width = 2.5f),
-                        )
                     }
 
-                    if (hasSpike && spikeIndex > 0) {
-                        val alertPath = Path().apply {
-                            moveTo(pts[spikeIndex - 1].x, pts[spikeIndex - 1].y)
-                            for (i in spikeIndex until count) {
-                                lineTo(pts[i].x, pts[i].y)
-                            }
-                        }
-                        drawPath(
-                            path  = alertPath,
-                            color = AlertRed,
-                            style = Stroke(width = 2.5f),
-                        )
-
+                    if (hasSpike) {
                         val spikePt = pts[spikeIndex]
                         drawCircle(AlertRedHalo, radius = 20f, center = spikePt)
                         drawCircle(AlertRed,     radius = 6f,  center = spikePt)
@@ -586,7 +574,7 @@ private fun SevenDayChart(
 
                     pts.forEachIndexed { i, pt ->
                         val dotColor =
-                            if (hasSpike && i >= spikeIndex) AlertRed else NormalGreen
+                            if (readings[i] > threshold) AlertRed else NormalGreen
                         drawCircle(Color.White, radius = 5f, center = pt)
                         drawCircle(dotColor,    radius = 3f, center = pt)
                     }

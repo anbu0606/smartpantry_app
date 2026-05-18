@@ -49,6 +49,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lab03g10.smartpantry.data.local.entity.SensorReadingEntity
 import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
@@ -99,7 +100,22 @@ private val DEFAULT_HUMIDITY_THRESHOLDS: Map<EnvironmentType, Float> = mapOf(
     EnvironmentType.CUSTOM       to 70f,
 )
 
-private val chartTimeLabelFmt = SimpleDateFormat("HH'h'", Locale.ENGLISH)
+// HH:mm so multiple readings within an hour aren't all labelled the same.
+private val chartTimeLabelFmt = SimpleDateFormat("HH:mm", Locale.ENGLISH)
+
+/** Down-sample [readings] to at most [target] evenly-spaced HH:mm labels.
+ *  Without this, N readings → N labels, which `Arrangement.SpaceBetween`
+ *  jams into the row width as a wall of overlapping text. */
+private fun sampledTimeLabels(readings: List<SensorReadingEntity>, target: Int = 5): List<String> {
+    if (readings.isEmpty()) return emptyList()
+    val n = readings.size.coerceAtMost(target)
+    if (n == 1) return listOf(chartTimeLabelFmt.format(Date(readings.first().timestamp)))
+    val step = (readings.size - 1).toFloat() / (n - 1).toFloat()
+    return (0 until n).map { i ->
+        val idx = (i * step).toInt().coerceAtMost(readings.lastIndex)
+        chartTimeLabelFmt.format(Date(readings[idx].timestamp))
+    }
+}
 
 /** Adapts the VM's `LocationLiveData` to the existing `LocationConfig` view
  *  shape so the chart / tab / TemperatureCard code below doesn't have to be
@@ -108,7 +124,7 @@ private fun LocationLiveData.toViewConfig(): LocationConfig {
     val temps = recentReadings.map { it.temperatureC }.toFloatArray()
     val hums  = recentReadings.map { it.humidity }.toFloatArray()
     val luxes = recentReadings.map { it.lux }.toFloatArray()
-    val timeLabels = recentReadings.map { chartTimeLabelFmt.format(Date(it.timestamp)) }
+    val timeLabels = sampledTimeLabels(recentReadings)
 
     // Chart y-axis: wide enough to always show the alert threshold, with a
     // little padding around the actual data range.
@@ -452,7 +468,9 @@ private fun SensorLineChart(
                     val w        = size.width
                     val h        = size.height
                     val count    = readings.size
-                    val stepX    = w / (count - 1).toFloat()
+                    // Single-reading series → stepX collapses to 0 so the dot
+                    // anchors at x=0 instead of dividing by zero.
+                    val stepX    = if (count > 1) w / (count - 1).toFloat() else 0f
 
                     fun valueToY(v: Float) = h * (1f - (v - chartMin) / valueRange)
                     fun xAt(i: Int)        = i * stepX
@@ -481,41 +499,38 @@ private fun SensorLineChart(
                             pathEffect  = PathEffect.dashPathEffect(floatArrayOf(12f, 8f)),
                         )
 
-                        val normalEndIdx = if (hasSpike) spikeIndex else count - 1
-                        if (normalEndIdx >= 1) {
-                            val normalPath = Path().apply {
-                                moveTo(pts[0].x, pts[0].y)
-                                for (i in 1..normalEndIdx) {
-                                    lineTo(pts[i].x, pts[i].y)
-                                }
+                        // Per-segment colouring. Each segment between adjacent
+                        // points is red iff EITHER endpoint exceeds threshold;
+                        // green otherwise. Previous logic used
+                        // indexOfFirst { > threshold } and painted everything
+                        // after that index red — which meant a sawtooth that
+                        // crossed in and out stayed red on the safe stretches,
+                        // and any second breach got no visual treatment.
+                        if (count >= 2) {
+                            for (i in 0 until count - 1) {
+                                val segIsBreach = readings[i] > threshold
+                                    || readings[i + 1] > threshold
+                                drawLine(
+                                    color       = if (segIsBreach) AlertRed else NormalGreen,
+                                    start       = pts[i],
+                                    end         = pts[i + 1],
+                                    strokeWidth = 2.5f,
+                                )
                             }
-                            drawPath(
-                                path  = normalPath,
-                                color = NormalGreen,
-                                style = Stroke(width = 2.5f),
-                            )
                         }
 
-                        if (hasSpike && spikeIndex > 0) {
-                            val alertPath = Path().apply {
-                                moveTo(pts[spikeIndex - 1].x, pts[spikeIndex - 1].y)
-                                for (i in spikeIndex until count) {
-                                    lineTo(pts[i].x, pts[i].y)
-                                }
-                            }
-                            drawPath(
-                                path  = alertPath,
-                                color = AlertRed,
-                                style = Stroke(width = 2.5f),
-                            )
-
+                        // Halo on the FIRST breach point — single attention
+                        // marker for "this is when it crossed the line".
+                        if (hasSpike) {
                             val spikePt = pts[spikeIndex]
                             drawCircle(AlertRedHalo, radius = 20f, center = spikePt)
                             drawCircle(AlertRed,     radius = 6f,  center = spikePt)
                         }
 
+                        // Dot colour also per-value, not "everything after the
+                        // first spike".
                         pts.forEachIndexed { i, pt ->
-                            val dotColor = if (hasSpike && i >= spikeIndex) AlertRed else NormalGreen
+                            val dotColor = if (readings[i] > threshold) AlertRed else NormalGreen
                             drawCircle(Color.White, radius = 5f, center = pt)
                             drawCircle(dotColor,    radius = 3f, center = pt)
                         }

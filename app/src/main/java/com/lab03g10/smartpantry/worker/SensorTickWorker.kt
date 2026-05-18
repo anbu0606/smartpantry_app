@@ -34,9 +34,22 @@ class SensorTickWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result = try {
         val configs = sensorRepo.observeConfigs().first().filter { it.active }
+        // Look up the most recent reading per sensor ONCE so we can space new
+        // readings at least one tick-interval apart from the previous one.
+        // Why: rapid debug-button clicks would otherwise stamp every reading
+        // with the current wall-clock minute, producing chart labels like
+        // "21h 21h 21h 22h 22h 22h" — visually broken and useless for demo.
+        // Production behaviour is unchanged: real WorkManager ticks fire
+        // ≥15 min apart, so max(now, lastTs + 15min) reduces to `now`.
+        val latestBySensor = sensorRepo.observeLatestPerSensor().first()
+            .associateBy { it.sensorId }
+        val now = System.currentTimeMillis()
         for (config in configs) {
             simulator.load(config.id, config.csvAssetName)
-            val raw = simulator.nextReading(config.id) ?: continue
+            val nextTs = latestBySensor[config.id]
+                ?.let { maxOf(now, it.timestamp + TICK_INTERVAL_MS) }
+                ?: now
+            val raw = simulator.nextReading(config.id, nextTs) ?: continue
             val flag = computeBreachFlag(raw, config)
             val reading = raw.copy(breachFlag = flag)
             sensorRepo.insertReading(reading)
@@ -78,6 +91,8 @@ class SensorTickWorker @AssistedInject constructor(
 
     companion object {
         internal const val RECALC_WORK_NAME = "smartpantry.shelf-life-recalc"
+        // Matches the PeriodicWorkRequest interval in SensorTickScheduler.schedule().
+        private const val TICK_INTERVAL_MS: Long = 15L * 60 * 1000
     }
 }
 
