@@ -26,4 +26,16 @@ interface ShoppingItemDao {
 
     @Query("UPDATE shopping SET checked = NOT checked WHERE id = :id")
     suspend fun toggle(id: String)
+
+    @Query("UPDATE shopping SET quantity = :quantity WHERE id = :id")
+    suspend fun updateQuantity(id: String, quantity: String)
+
+    @Query("UPDATE shopping SET unit = :unit WHERE id = :id")
+    suspend fun updateUnit(id: String, unit: String)
+
+    @Query("UPDATE shopping SET nominalExpiryDate = :nominalExpiryDate WHERE id = :id")
+    suspend fun updateExpiry(id: String, nominalExpiryDate: Long)
+
+    @Query("UPDATE shopping SET storageLocationId = :storageLocationId WHERE id = :id")
+    suspend fun updateStorage(id: String, storageLocationId: String?)
 }
