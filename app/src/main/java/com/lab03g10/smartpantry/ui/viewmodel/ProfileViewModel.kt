@@ -7,7 +7,6 @@ import com.lab03g10.smartpantry.domain.repo.AuthRepository
 import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import com.lab03g10.smartpantry.notification.ExpiryNotifier // TODO-TEST: remove before submission
-import com.lab03g10.smartpantry.worker.SensorTickScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -23,7 +22,6 @@ class ProfileViewModel @Inject constructor(
     private val preferenceRepository: PreferenceRepository,
     // TODO-TEST: remove expiryNotifier param and its function before submission
     private val expiryNotifier: ExpiryNotifier,
-    private val sensorTickScheduler: SensorTickScheduler,
     private val sensorRepository: SensorRepository,
 ) : ViewModel() {
 
@@ -98,17 +96,6 @@ class ProfileViewModel @Inject constructor(
     // TODO-TEST: remove this function before submission
     fun triggerTestNotification() {
         viewModelScope.launch { expiryNotifier.notifyExpiringItems() }
-    }
-
-    /**
-     * Debug-only: enqueues a one-shot SensorTickWorker so demo + manual
-     * verification don't have to wait for the 15-minute periodic interval.
-     * Runs the exact same production worker — no fake data injected; the
-     * UI entry point is gated on BuildConfig.DEBUG (see ProfileScreen).
-     * See docs/bug-log.md BUG-009.
-     */
-    fun triggerSensorTickNow() {
-        sensorTickScheduler.triggerOnce()
     }
 
     /**

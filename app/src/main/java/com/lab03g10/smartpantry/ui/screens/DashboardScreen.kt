@@ -26,6 +26,7 @@ import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.outlined.CalendarToday
 import androidx.compose.material.icons.outlined.CheckCircle
+import androidx.compose.material.icons.outlined.FastForward
 import androidx.compose.material.icons.outlined.Notifications
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -55,6 +56,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import com.lab03g10.smartpantry.BuildConfig
 import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
 import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
@@ -146,6 +148,7 @@ fun DashboardScreen(
                 userInitial = userInitial,
                 onNavigateToNotifications = onNavigateToNotifications,
                 onNavigateToProfile = onNavigateToProfile,
+                onTriggerSensorTick = viewModel::triggerSensorTickNow,
             )
         },
         containerColor = MaterialTheme.colorScheme.background,
@@ -333,7 +336,8 @@ private fun DashboardTopBar(
     unreadCount: Int,
     userInitial: String,
     onNavigateToNotifications: () -> Unit,
-    onNavigateToProfile: () -> Unit) {
+    onNavigateToProfile: () -> Unit,
+    onTriggerSensorTick: () -> Unit) {
     CenterAlignedTopAppBar(
         title = {
             Text(
@@ -343,6 +347,26 @@ private fun DashboardTopBar(
                 ),
                 color = MaterialTheme.colorScheme.primary,
             )
+        },
+        navigationIcon = {
+            // Debug-only fast-forward: enqueues a one-shot SensorTickWorker
+            // so demo + manual verification don't have to wait the 15-min
+            // periodic interval. Kept deliberately small & low-contrast so
+            // it doesn't read as a primary action. See docs/bug-log.md BUG-009.
+            if (BuildConfig.DEBUG) {
+                IconButton(
+                    onClick  = onTriggerSensorTick,
+                    modifier = Modifier.size(32.dp),
+                ) {
+                    Icon(
+                        imageVector        = Icons.Outlined.FastForward,
+                        contentDescription = "Trigger sensor tick (debug)",
+                        tint               = MaterialTheme.colorScheme.onSurfaceVariant
+                            .copy(alpha = 0.35f),
+                        modifier           = Modifier.size(16.dp),
+                    )
+                }
+            }
         },
         actions = {
             IconButton(onClick = onNavigateToNotifications) {

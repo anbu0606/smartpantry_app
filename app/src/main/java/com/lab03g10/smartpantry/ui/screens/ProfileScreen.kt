@@ -13,16 +13,13 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Edit
-import androidx.compose.material.icons.outlined.Sensors
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
@@ -65,7 +62,6 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
-import com.lab03g10.smartpantry.BuildConfig
 import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
 import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
@@ -519,34 +515,6 @@ fun ProfileScreen(
                         )
                     }
 
-                    // Debug affordance — calls the real production worker on
-                    // demand so demo + manual verification don't have to wait
-                    // the 15-minute periodic interval. Hidden in release
-                    // builds via BuildConfig.DEBUG. See docs/bug-log.md
-                    // BUG-009 for the full rationale (and why this is
-                    // deliberately distinct from the BUG-005 fake-alarm
-                    // button being removed).
-                    if (BuildConfig.DEBUG) {
-                        OutlinedButton(
-                            onClick  = { viewModel.triggerSensorTickNow() },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors   = ButtonDefaults.outlinedButtonColors(
-                                contentColor = MaterialTheme.colorScheme.tertiary,
-                            ),
-                        ) {
-                            Icon(
-                                imageVector        = Icons.Outlined.Sensors,
-                                contentDescription = null,
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text(
-                                text  = "Trigger Sensor Tick (debug)",
-                                style = MaterialTheme.typography.labelLarge.copy(
-                                    fontWeight = FontWeight.SemiBold,
-                                ),
-                            )
-                        }
-                    }
                 }
             }
         }

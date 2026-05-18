@@ -9,6 +9,7 @@ import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.NotificationRepository
 import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
+import com.lab03g10.smartpantry.worker.SensorTickScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import javax.inject.Inject
@@ -55,9 +56,19 @@ class DashboardViewModel @Inject constructor(
     private val foodRepository: FoodRepository,
     private val sensorRepository: SensorRepository,
     private val notificationRepository: NotificationRepository,
+    private val sensorTickScheduler: SensorTickScheduler,
     authRepository: AuthRepository,
     preferenceRepository: PreferenceRepository,
 ) : ViewModel() {
+
+    /**
+     * Debug-only: enqueues a one-shot SensorTickWorker so demo + manual
+     * verification don't have to wait the 15-minute periodic interval.
+     * UI entry point is gated on BuildConfig.DEBUG (see DashboardScreen).
+     */
+    fun triggerSensorTickNow() {
+        sensorTickScheduler.triggerOnce()
+    }
 
     /**
      * First letter shown on the Dashboard top-bar avatar. Source order:
