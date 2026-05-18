@@ -248,11 +248,16 @@ private fun ShoppingProgressFab(
  */
 @Composable
 private fun SectionHeader(title: String) {
-    Text(
-        text = title,
-        color = SectionHeaderGreen,
-        modifier = Modifier.padding(16.dp)
-    )
+    Surface(
+        modifier = Modifier.fillMaxWidth(),
+        color = MaterialTheme.colorScheme.background,
+    ) {
+        Text(
+            text = title,
+            color = SectionHeaderGreen,
+            modifier = Modifier.padding(16.dp)
+        )
+    }
 }
 
 /**
