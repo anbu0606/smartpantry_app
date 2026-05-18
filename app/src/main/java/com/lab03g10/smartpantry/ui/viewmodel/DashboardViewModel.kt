@@ -61,22 +61,30 @@ class DashboardViewModel @Inject constructor(
 
     /**
      * First letter shown on the Dashboard top-bar avatar. Source order:
-     *   1. User's preferred display name (`PreferenceRepository.observeUserName`)
-     *   2. Firebase account displayName
-     *   3. Firebase account email (first letter)
+     *   1. Firebase account displayName (set at sign-up via
+     *      `UserProfileChangeRequest.setDisplayName` in AuthRepositoryImpl)
+     *   2. Firebase account email (first letter)
+     *   3. PreferenceRepository.observeUserName as a last-ditch fallback
      *   4. "?" placeholder while everything is still null/blank
      *
-     * Kept as a sibling StateFlow rather than folded into `state` because the
-     * main combine is already at 5 arms and the avatar updates are independent
-     * of the dashboard's food / sensor / notification streams.
+     * Why Firebase before preference: DataStore preferences are stored
+     * **app-wide**, not per-account, so signing out as user A and signing
+     * back in as user B leaves A's preferred name in DataStore. The avatar
+     * represents "who is currently signed in", so it has to follow Firebase
+     * (which IS per-account) — otherwise the new user sees the previous
+     * user's initial after a sign-in switch.
+     *
+     * Kept as a sibling StateFlow rather than folded into `state` because
+     * the main combine is already at 5 arms and the avatar updates are
+     * independent of the dashboard's food / sensor / notification streams.
      */
     val userInitial: StateFlow<String> = combine(
         authRepository.observeCurrentUser(),
         preferenceRepository.observeUserName(),
     ) { firebaseUser, prefName ->
-        val name = prefName.takeIf { it.isNotBlank() }
-            ?: firebaseUser?.displayName?.takeIf { it.isNotBlank() }
+        val name = firebaseUser?.displayName?.takeIf { it.isNotBlank() }
             ?: firebaseUser?.email
+            ?: prefName.takeIf { it.isNotBlank() }
             ?: ""
         name.trim().firstOrNull()?.uppercaseChar()?.toString() ?: "?"
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), "?")

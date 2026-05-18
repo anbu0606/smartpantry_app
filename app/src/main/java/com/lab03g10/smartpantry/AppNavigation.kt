@@ -150,16 +150,31 @@ fun AppNavigation() {
                 SmartPantryBottomBar(
                     currentRoute = currentRoute,
                     onTabSelected = { route ->
+                        // Tap on the current tab → no-op. Without this guard,
+                        // repeated taps still execute the popUpTo+navigate
+                        // round-trip which can churn the back stack.
+                        if (route == currentRoute) return@SmartPantryBottomBar
+
+                        // Special-case Dashboard: wipe everything else off the
+                        // stack so Dashboard becomes the sole entry. Hardens
+                        // the tab against any back-stack state where Dashboard
+                        // was inadvertently popped — popUpTo(DASHBOARD) would
+                        // silently no-op there, and the old recipe could leave
+                        // Dashboard buried under other entries.
+                        if (route == Route.DASHBOARD) {
+                            navController.navigate(Route.DASHBOARD) {
+                                popUpTo(0) { inclusive = true }
+                                launchSingleTop = true
+                            }
+                            return@SmartPantryBottomBar
+                        }
+
+                        // Other tabs: keep Dashboard at the bottom of the stack
+                        // (post-auth home) and preserve per-tab deep nav state.
                         navController.navigate(route) {
-                            // Bottom-nav semantic: every tab pops back to Dashboard (the post-auth home),
-                            // saves the leaving tab's state, and dedupes if we're already on the target.
-                            // Hardcoded to Route.DASHBOARD rather than findStartDestination() because the
-                            // graph's startDestination is LOGIN initially (pre-auth) and can leak into
-                            // post-auth navigation, causing the popUpTo target to be a non-existent
-                            // back-stack entry → silent navigate cancellation.
                             popUpTo(Route.DASHBOARD) {
                                 saveState = true
-                                inclusive = false   // keep Dashboard on the stack as the bottom-nav home
+                                inclusive = false
                             }
                             launchSingleTop = true
                             restoreState    = true
