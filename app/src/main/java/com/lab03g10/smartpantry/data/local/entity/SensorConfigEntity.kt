@@ -16,6 +16,9 @@ data class SensorConfigEntity(
     // EnvironmentType.name — stored as String to keep DB human-readable
     val environmentType: String,
     val thresholdC: Float,
+    // Upper bound for relative humidity (%); reading > threshold triggers a
+    // SENSOR_BREACH notification AND a red segment on the humidity chart.
+    val humidityThreshold: Float,
     val maxLux: Float,
     // Filename inside assets/sensors/ (e.g. "fridge.csv") — drives the simulator
     val csvAssetName: String,

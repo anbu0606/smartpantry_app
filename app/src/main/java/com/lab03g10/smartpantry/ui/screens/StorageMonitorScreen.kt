@@ -86,20 +86,6 @@ private data class LocationConfig(
     val chartMaxTemp: Float,
 )
 
-// Humidity isn't tracked on SensorConfigEntity; per-environment defaults
-// approximate what the A2 prototype used to hardcode. Move to the entity if
-// users need to customise per-sensor.
-private val DEFAULT_HUMIDITY_THRESHOLDS: Map<EnvironmentType, Float> = mapOf(
-    EnvironmentType.REFRIGERATOR to 70f,
-    EnvironmentType.FREEZER      to 70f,
-    EnvironmentType.PANTRY       to 70f,
-    EnvironmentType.CUPBOARD     to 60f,
-    EnvironmentType.CELLAR       to 75f,
-    EnvironmentType.OPEN_SHELF   to 70f,
-    EnvironmentType.GARAGE       to 80f,
-    EnvironmentType.CUSTOM       to 70f,
-)
-
 // HH:mm so multiple readings within an hour aren't all labelled the same.
 private val chartTimeLabelFmt = SimpleDateFormat("HH:mm", Locale.ENGLISH)
 
@@ -131,8 +117,6 @@ private fun LocationLiveData.toViewConfig(): LocationConfig {
     val tempMin = (temps.minOrNull() ?: thresholdC).coerceAtMost(thresholdC) - 2f
     val tempMax = (temps.maxOrNull() ?: thresholdC).coerceAtLeast(thresholdC) + 2f
 
-    val humidityThreshold = DEFAULT_HUMIDITY_THRESHOLDS[environmentType] ?: 70f
-
     return LocationConfig(
         sensorId               = sensorId,
         name                   = displayName,
@@ -148,7 +132,7 @@ private fun LocationLiveData.toViewConfig(): LocationConfig {
         luxReadings            = luxes,
         timeLabels             = timeLabels,
         alertThreshold         = thresholdC,
-        humidityAlertThreshold = humidityThreshold,
+        humidityAlertThreshold = this.humidityThreshold,
         luxAlertThreshold      = maxLux,
         chartMinTemp           = tempMin,
         chartMaxTemp           = tempMax,

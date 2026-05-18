@@ -52,8 +52,9 @@ class AddSensorViewModel @Inject constructor(
                     displayName = s.displayName.trim(),
                     deviceId = s.deviceId.trim(),
                     environmentType = s.environmentType.name,
-                    thresholdC = s.environmentType.suggestedThresholdC,
-                    maxLux = s.environmentType.suggestedMaxLux,
+                    thresholdC        = s.environmentType.suggestedThresholdC,
+                    humidityThreshold = s.environmentType.suggestedHumidityThreshold,
+                    maxLux            = s.environmentType.suggestedMaxLux,
                     csvAssetName = when (s.environmentType) {
                         EnvironmentType.REFRIGERATOR -> "fridge.csv"
                         EnvironmentType.FREEZER -> "freezer.csv"

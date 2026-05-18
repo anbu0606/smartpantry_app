@@ -35,6 +35,7 @@ data class LocationLiveData(
     val environmentType: EnvironmentType,
     val latestReading: SensorReadingEntity?,
     val thresholdC: Float,
+    val humidityThreshold: Float,
     val maxLux: Float,
     val recentReadings: List<SensorReadingEntity>,
 )
@@ -76,10 +77,11 @@ class StorageMonitorViewModel @Inject constructor(
                                 environmentType = runCatching {
                                     EnvironmentType.valueOf(config.environmentType)
                                 }.getOrDefault(EnvironmentType.CUSTOM),
-                                latestReading   = latestById[config.id],
-                                thresholdC      = config.thresholdC,
-                                maxLux          = config.maxLux,
-                                recentReadings  = recentPerConfig[index],
+                                latestReading     = latestById[config.id],
+                                thresholdC        = config.thresholdC,
+                                humidityThreshold = config.humidityThreshold,
+                                maxLux            = config.maxLux,
+                                recentReadings    = recentPerConfig[index],
                             )
                         },
                     )

@@ -20,7 +20,14 @@ import com.lab03g10.smartpantry.data.local.entity.*
         NotificationEntity::class,
         ShoppingItemEntity::class,
     ],
-    version = 1,
+    // v2 (2026-05-19): added SensorConfigEntity.humidityThreshold.
+    // v3 (2026-05-19): no schema change vs v2 — bumped to retrigger
+    //   fallbackToDestructiveMigration. v2 shipped without an
+    //   onDestructiveMigration callback in DatabaseModule, so the seed
+    //   sensors were never inserted on the v1→v2 destructive migration
+    //   (onCreate only fires on FIRST creation, not on destructive recreate).
+    //   v3 + the new onDestructiveMigration hook re-seeds correctly.
+    version = 3,
     // matches the ksp { arg("room.schemaLocation", ...) } from Day 1
     exportSchema = true,
 )

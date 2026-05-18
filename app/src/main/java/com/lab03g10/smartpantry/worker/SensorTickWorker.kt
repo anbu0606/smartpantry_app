@@ -96,9 +96,10 @@ class SensorTickWorker @AssistedInject constructor(
     }
 }
 
-// Bitset positions match SensorReadingEntity.breachFlag (bit 1 reserved for humidity).
+// Bitset positions match SensorReadingEntity.breachFlag.
 internal const val BREACH_BIT_TEMPERATURE = 0b001
-internal const val BREACH_BIT_LUX = 0b100
+internal const val BREACH_BIT_HUMIDITY    = 0b010
+internal const val BREACH_BIT_LUX         = 0b100
 
 internal fun computeBreachFlag(
     reading: SensorReadingEntity,
@@ -106,6 +107,7 @@ internal fun computeBreachFlag(
 ): Int {
     var flag = 0
     if (reading.temperatureC > config.thresholdC) flag = flag or BREACH_BIT_TEMPERATURE
+    if (reading.humidity > config.humidityThreshold) flag = flag or BREACH_BIT_HUMIDITY
     if (reading.lux > config.maxLux) flag = flag or BREACH_BIT_LUX
     return flag
 }
@@ -118,6 +120,9 @@ internal fun describeBreach(
     val parts = mutableListOf<String>()
     if (flag and BREACH_BIT_TEMPERATURE != 0) {
         parts += "Temperature ${reading.temperatureC}°C exceeds threshold ${config.thresholdC}°C"
+    }
+    if (flag and BREACH_BIT_HUMIDITY != 0) {
+        parts += "Humidity ${reading.humidity}% exceeds threshold ${config.humidityThreshold}%"
     }
     if (flag and BREACH_BIT_LUX != 0) {
         parts += "Light ${reading.lux} lux exceeds maximum ${config.maxLux} lux"

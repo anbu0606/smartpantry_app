@@ -81,9 +81,8 @@ private val pairedDateFmt  = SimpleDateFormat("dd MMM yyyy", Locale.ENGLISH)
 
 // Humidity is always reported as a percentage; lux/temperature bounds are
 // derived from the data + the sensor's configured thresholds.
-private const val HUMIDITY_THRESHOLD = 70f
-private const val HUMIDITY_MIN       = 0f
-private const val HUMIDITY_MAX       = 100f
+private const val HUMIDITY_MIN = 0f
+private const val HUMIDITY_MAX = 100f
 
 
 /**
@@ -249,10 +248,11 @@ fun SensorDetailScreen(
                     }
                 } else {
                     ChartCard(
-                        readings        = readings,
-                        thresholdC      = config.thresholdC,
-                        maxLux          = config.maxLux,
-                        selectedTab     = selectedChartTab,
+                        readings          = readings,
+                        thresholdC        = config.thresholdC,
+                        humidityThreshold = config.humidityThreshold,
+                        maxLux            = config.maxLux,
+                        selectedTab       = selectedChartTab,
                     )
                 }
             }
@@ -362,6 +362,7 @@ fun SensorDetailScreen(
 private fun ChartCard(
     readings: List<SensorReadingEntity>,
     thresholdC: Float,
+    humidityThreshold: Float,
     maxLux: Float,
     selectedTab: Int,
 ) {
@@ -376,7 +377,7 @@ private fun ChartCard(
     when (selectedTab) {
         1 -> {
             series          = readings.map { it.humidity }.toFloatArray()
-            threshold       = HUMIDITY_THRESHOLD
+            threshold       = humidityThreshold
             chartMin        = HUMIDITY_MIN
             chartMax        = HUMIDITY_MAX
             title           = "Humidity trend — last 7 days"
