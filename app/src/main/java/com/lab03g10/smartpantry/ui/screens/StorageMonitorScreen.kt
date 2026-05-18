@@ -36,6 +36,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithCache
 import androidx.compose.ui.geometry.Offset
@@ -47,9 +49,15 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.lab03g10.smartpantry.domain.model.EnvironmentType
 import com.lab03g10.smartpantry.ui.components.EmptyState
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
+import com.lab03g10.smartpantry.ui.viewmodel.LocationLiveData
+import com.lab03g10.smartpantry.ui.viewmodel.StorageMonitorViewModel
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 // ── Chart colour
 private val NormalGreen    = Color(0xFF2E7D32)
@@ -77,62 +85,59 @@ private data class LocationConfig(
     val chartMaxTemp: Float,
 )
 
-private val locations = listOf(
-    LocationConfig(
-        sensorId               = "sensor-fridge",
-        name                   = "Fridge",
-        emoji                  = "🧊",
-        currentTemp            = 4.2f,
-        currentHumidity        = 58f,
-        currentLux             = 12f,
-        isNormal               = true,
-        tempReadings           = floatArrayOf(3.8f, 4.0f, 4.1f, 3.9f, 4.2f, 4.0f, 8.5f, 4.1f),
-        humidityReadings       = floatArrayOf(56f, 57f, 58f, 57f, 58f, 59f, 65f, 58f),
-        luxReadings            = floatArrayOf(5f, 8f, 45f, 6f, 4f, 8f, 180f, 12f),
-        timeLabels             = listOf("08h", "10h", "12h", "14h", "16h", "18h", "20h", "22h"),
-        alertThreshold         = 6.0f,
-        humidityAlertThreshold = 70f,
-        luxAlertThreshold      = 50f,
-        chartMinTemp           = 2.0f,
-        chartMaxTemp           = 10.0f,
-    ),
-    LocationConfig(
-        sensorId               = "sensor-pantry",
-        name                   = "Pantry",
-        emoji                  = "🌡",
-        currentTemp            = 26.5f,
-        currentHumidity        = 63f,
-        currentLux             = 285f,
-        isNormal               = false,
-        tempReadings           = floatArrayOf(22.0f, 23.5f, 24.0f, 25.2f, 26.5f, 29.5f, 28.0f, 26.5f),
-        humidityReadings       = floatArrayOf(60f, 62f, 63f, 65f, 63f, 72f, 66f, 63f),
-        luxReadings            = floatArrayOf(120f, 145f, 180f, 230f, 280f, 420f, 290f, 285f),
-        timeLabels             = listOf("08h", "10h", "12h", "14h", "16h", "18h", "20h", "22h"),
-        alertThreshold         = 28.0f,
-        humidityAlertThreshold = 70f,
-        luxAlertThreshold      = 400f,
-        chartMinTemp           = 18.0f,
-        chartMaxTemp           = 35.0f,
-    ),
-    LocationConfig(
-        sensorId               = "sensor-cupboard",
-        name                   = "Cupboard",
-        emoji                  = "🚪",
-        currentTemp            = 21.0f,
-        currentHumidity        = 45f,
-        currentLux             = 38f,
-        isNormal               = true,
-        tempReadings           = floatArrayOf(20.5f, 21.0f, 20.8f, 21.2f, 21.0f, 20.5f, 21.5f, 21.0f),
-        humidityReadings       = floatArrayOf(44f, 45f, 45f, 46f, 45f, 44f, 46f, 45f),
-        luxReadings            = floatArrayOf(20f, 25f, 18f, 42f, 35f, 30f, 45f, 38f),
-        timeLabels             = listOf("08h", "10h", "12h", "14h", "16h", "18h", "20h", "22h"),
-        alertThreshold         = 25.0f,
-        humidityAlertThreshold = 60f,
-        luxAlertThreshold      = 100f,
-        chartMinTemp           = 18.0f,
-        chartMaxTemp           = 30.0f,
-    ),
+// Humidity isn't tracked on SensorConfigEntity; per-environment defaults
+// approximate what the A2 prototype used to hardcode. Move to the entity if
+// users need to customise per-sensor.
+private val DEFAULT_HUMIDITY_THRESHOLDS: Map<EnvironmentType, Float> = mapOf(
+    EnvironmentType.REFRIGERATOR to 70f,
+    EnvironmentType.FREEZER      to 70f,
+    EnvironmentType.PANTRY       to 70f,
+    EnvironmentType.CUPBOARD     to 60f,
+    EnvironmentType.CELLAR       to 75f,
+    EnvironmentType.OPEN_SHELF   to 70f,
+    EnvironmentType.GARAGE       to 80f,
+    EnvironmentType.CUSTOM       to 70f,
 )
+
+private val chartTimeLabelFmt = SimpleDateFormat("HH'h'", Locale.ENGLISH)
+
+/** Adapts the VM's `LocationLiveData` to the existing `LocationConfig` view
+ *  shape so the chart / tab / TemperatureCard code below doesn't have to be
+ *  rewritten. Charts read 0/empty when there's no history yet. */
+private fun LocationLiveData.toViewConfig(): LocationConfig {
+    val temps = recentReadings.map { it.temperatureC }.toFloatArray()
+    val hums  = recentReadings.map { it.humidity }.toFloatArray()
+    val luxes = recentReadings.map { it.lux }.toFloatArray()
+    val timeLabels = recentReadings.map { chartTimeLabelFmt.format(Date(it.timestamp)) }
+
+    // Chart y-axis: wide enough to always show the alert threshold, with a
+    // little padding around the actual data range.
+    val tempMin = (temps.minOrNull() ?: thresholdC).coerceAtMost(thresholdC) - 2f
+    val tempMax = (temps.maxOrNull() ?: thresholdC).coerceAtLeast(thresholdC) + 2f
+
+    val humidityThreshold = DEFAULT_HUMIDITY_THRESHOLDS[environmentType] ?: 70f
+
+    return LocationConfig(
+        sensorId               = sensorId,
+        name                   = displayName,
+        emoji                  = environmentType.emoji,
+        currentTemp            = latestReading?.temperatureC ?: 0f,
+        currentHumidity        = latestReading?.humidity ?: 0f,
+        currentLux             = latestReading?.lux ?: 0f,
+        // breachFlag 0 = clean reading. Null reading (worker hasn't fired yet)
+        // shows as normal so the card doesn't false-alarm on first launch.
+        isNormal               = (latestReading?.breachFlag ?: 0) == 0,
+        tempReadings           = temps,
+        humidityReadings       = hums,
+        luxReadings            = luxes,
+        timeLabels             = timeLabels,
+        alertThreshold         = thresholdC,
+        humidityAlertThreshold = humidityThreshold,
+        luxAlertThreshold      = maxLux,
+        chartMinTemp           = tempMin,
+        chartMaxTemp           = tempMax,
+    )
+}
 
 //Metric labels
 
@@ -148,10 +153,15 @@ private val metricTabs = listOf("🌡 Temperature", "💧 Humidity", "☀ Light"
 fun StorageMonitorScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSensorDetail: (String) -> Unit = {},
+    viewModel: StorageMonitorViewModel = hiltViewModel(),
 ) {
-    // Forward-compat for when Abinaya replaces `locations` with VM state — once
-    // the list can actually be empty, the EmptyState below renders instead of
-    // crashing the tabs/index access.
+    val state by viewModel.state.collectAsStateWithLifecycle()
+    // Adapt the VM's LocationLiveData to the existing LocationConfig view
+    // shape (charts / tabs / cards keep their current signatures).
+    val locations = remember(state.locations) {
+        state.locations.map { it.toViewConfig() }
+    }
+
     if (locations.isEmpty()) {
         Scaffold(
             topBar = {
@@ -179,7 +189,10 @@ fun StorageMonitorScreen(
 
     var selectedTab       by remember { mutableIntStateOf(0) }
     var selectedMetricTab by remember { mutableIntStateOf(0) }
-    val location = locations[selectedTab]
+    // Clamp in case the list shrinks (e.g. user deletes the sensor they were
+    // viewing). Without this, locations[selectedTab] would throw.
+    val safeIndex = selectedTab.coerceIn(0, locations.lastIndex)
+    val location = locations[safeIndex]
 
     Scaffold(
         topBar = {
@@ -201,7 +214,7 @@ fun StorageMonitorScreen(
                     }
                 },
                 actions = {
-                    IconButton(onClick = { onNavigateToSensorDetail(locations[selectedTab].sensorId) }) {
+                    IconButton(onClick = { onNavigateToSensorDetail(location.sensorId) }) {
                         Icon(
                             imageVector        = Icons.Outlined.Settings,
                             contentDescription = "Sensor settings",
@@ -222,25 +235,25 @@ fun StorageMonitorScreen(
         ) {
             //Location tab row
             TabRow(
-                selectedTabIndex = selectedTab,
+                selectedTabIndex = safeIndex,
                 containerColor   = MaterialTheme.colorScheme.background,
                 contentColor     = MaterialTheme.colorScheme.primary,
                 indicator        = { tabPositions ->
                     SecondaryIndicator(
-                        modifier = Modifier.tabIndicatorOffset(tabPositions[selectedTab]),
+                        modifier = Modifier.tabIndicatorOffset(tabPositions[safeIndex]),
                         color    = MaterialTheme.colorScheme.primary,
                     )
                 },
             ) {
                 locations.forEachIndexed { index, loc ->
                     Tab(
-                        selected = selectedTab == index,
+                        selected = safeIndex == index,
                         onClick  = { selectedTab = index },
                         text     = {
                             Text(
                                 text  = "${loc.emoji} ${loc.name}",
                                 style = MaterialTheme.typography.labelMedium.copy(
-                                    fontWeight = if (selectedTab == index) {
+                                    fontWeight = if (safeIndex == index) {
                                         FontWeight.SemiBold
                                     } else {
                                         FontWeight.Normal
