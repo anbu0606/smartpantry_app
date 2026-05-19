@@ -12,7 +12,20 @@
           "package_name": "com.lab03g10.smartpantry"
         }
       },
-      "oauth_client": [],
+      "oauth_client": [
+        {
+          "client_id": "218320707597-n77qd0hnc3rus1bbvuaeefp7bnu492r5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lab03g10.smartpantry",
+            "certificate_hash": "18899961561bd2512b6df00f720eccfd753107fd"
+          }
+        },
+        {
+          "client_id": "218320707597-27fs0ivqlp1jatdg01ae9ur9ga1d3gam.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
       "api_key": [
         {
           "current_key": "AIzaSyBGfIG2v8lYuDsfBz7dkeMqrDpZ_NMF5UQ"
@@ -20,7 +33,12 @@
       ],
       "services": {
         "appinvite_service": {
-          "other_platform_oauth_client": []
+          "other_platform_oauth_client": [
+            {
+              "client_id": "218320707597-27fs0ivqlp1jatdg01ae9ur9ga1d3gam.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
         }
       }
     }

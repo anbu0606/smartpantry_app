@@ -1,6 +1,14 @@
 package com.lab03g10.smartpantry.ui.screens
 
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import androidx.credentials.CredentialManager
+import androidx.credentials.GetCredentialRequest
+import androidx.credentials.exceptions.GetCredentialCancellationException
+import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
+import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
+import kotlinx.coroutines.launch
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -62,6 +70,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 import com.lab03g10.smartpantry.ui.viewmodel.LoginViewModel
+
+private const val WEB_CLIENT_ID =
+    "218320707597-27fs0ivqlp1jatdg01ae9ur9ga1d3gam.apps.googleusercontent.com"
 
 // Card-level colour constants
 private val LogoIconBg    = Color(0xFFE1F5EE)   // pale green box behind the leaf icon
@@ -135,6 +146,9 @@ fun LoginScreen(
 
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -353,7 +367,27 @@ fun LoginScreen(
 
             // 6. Google button
             OutlinedButton(
-                onClick        = { /* TODO: Google Sign-In SDK */ },
+                onClick        = {
+                    coroutineScope.launch {
+                        try {
+                            val credentialManager = CredentialManager.create(context)
+                            val googleSignInOption = GetSignInWithGoogleOption
+                                .Builder(WEB_CLIENT_ID)
+                                .build()
+                            val request = GetCredentialRequest.Builder()
+                                .addCredentialOption(googleSignInOption)
+                                .build()
+                            val result = credentialManager.getCredential(context, request)
+                            val googleCredential = GoogleIdTokenCredential
+                                .createFrom(result.credential.data)
+                            viewModel.signInWithGoogle(googleCredential.idToken, onLoginSuccess)
+                        } catch (_: GetCredentialCancellationException) {
+                            // user dismissed the picker — no error shown
+                        } catch (e: Exception) {
+                            viewModel.setError(e.message ?: "Google sign-in failed")
+                        }
+                    }
+                },
                 modifier       = Modifier
                     .fillMaxWidth()
                     .height(52.dp),

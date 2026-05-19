@@ -48,6 +48,21 @@ class LoginViewModel @Inject constructor(
         return email.isNotEmpty() && android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
     }
 
+    fun signInWithGoogle(idToken: String, onLoginSuccess: () -> Unit) {
+        viewModelScope.launch {
+            _isLoading.value = true
+            _error.value = null
+            authRepository.signInWithGoogle(idToken)
+                .onSuccess { onLoginSuccess() }
+                .onFailure { _error.value = it.message ?: "Google sign-in failed" }
+            _isLoading.value = false
+        }
+    }
+
+    fun setError(message: String) {
+        _error.value = message
+    }
+
     fun clearError() {
         _error.value = null
     }
