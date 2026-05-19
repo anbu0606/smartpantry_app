@@ -25,6 +25,11 @@ interface AuthRepository {
     suspend fun sendPasswordReset(email: String): Result<Unit>
 
     /**
+     * Sign in with a Google ID token obtained from Credential Manager.
+     */
+    suspend fun signInWithGoogle(idToken: String): Result<FirebaseUser?>
+
+    /**
      * Signs the current user out.
      */
     fun signOut()
