@@ -16,13 +16,17 @@ import androidx.compose.foundation.layout.width
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Locale
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
@@ -150,11 +154,8 @@ fun AnalyticsScreen(
                         value = uiState.totalWastedItems.toString(),
                         label = "Items wasted",
                         valueColor = MaterialTheme.colorScheme.onSurface,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clickable {
-                                onNavigateToWasteLog()
-                            },
+                        onClick = onNavigateToWasteLog,
+                        modifier = Modifier.weight(1f),
                     )
 
                     StatTile(
@@ -202,10 +203,17 @@ private fun StatTile(
     label: String,
     valueColor: Color,
     modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
 ) {
     Box(
         modifier = modifier
             .background(StatTileBg, RoundedCornerShape(12.dp))
+            // `.clickable` is owned by StatTile so the chevron + ripple +
+            // tap target stay in lock-step. Order matters: clickable AFTER
+            // background means the ripple is clipped to the rounded shape.
+            .then(
+                if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier
+            )
             .padding(16.dp),
         contentAlignment = Alignment.Center,
     ) {
@@ -227,6 +235,21 @@ private fun StatTile(
                 style = MaterialTheme.typography.labelSmall,
                 color = LabelGrey,
                 textAlign = TextAlign.Center,
+            )
+        }
+
+        // Visual affordance: small chevron in the top-right corner so a
+        // tappable tile is distinguishable from the read-only ones around
+        // it. Without this users have no way to know the "Items wasted"
+        // tile is interactive (Material ripple only fires AFTER the tap).
+        if (onClick != null) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
+                contentDescription = "Open Waste Log",
+                tint = LabelGrey,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .size(16.dp),
             )
         }
     }

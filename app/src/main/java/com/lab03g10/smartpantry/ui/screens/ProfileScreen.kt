@@ -2,6 +2,9 @@ package com.lab03g10.smartpantry.ui.screens
 
 import android.content.res.Configuration.UI_MODE_NIGHT_YES
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,15 +52,20 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
-import androidx.compose.runtime.mutableStateMapOf
+// HIDDEN(dietary-prefs): re-enable when dietary preferences are wired to filtering.
+// import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
@@ -72,12 +80,19 @@ import com.lab03g10.smartpantry.ui.viewmodel.ProfileViewModel
 // Design tokens
 private val AvatarGreen       = Color(0xFF1D9E75)
 private val SectionLabelGreen = Color(0xFF0F6E56)
-private val IconTileBg        = Color(0xFFF5F5F5)
+// HIDDEN(dietary-prefs): only DietaryPrefRow used this tile colour.
+// private val IconTileBg        = Color(0xFFF5F5F5)
 private val SliderTrackFill   = Color(0xFFC8E6C9)
 private val SignOutRed        = Color(0xFFB71C1C)
 private val SubtitleGrey      = Color(0xFF888888)
 private val SliderActiveGreen = Color(0xFF2E7D32)
 
+// HIDDEN(dietary-prefs): Section was UI-only — toggles weren't persisted and
+// nothing downstream consumes them yet. Hidden until a real filtering /
+// suggestion-blocklist backend exists. Search "HIDDEN(dietary-prefs)" to find
+// all 4 commented regions (data, state, UI block, row composable) + the
+// orphan import; uncomment each to restore.
+/*
 // Dietary preference data
 private data class DietPref(val id: String, val emoji: String, val title: String, val subtitle: String)
 
@@ -94,6 +109,7 @@ private val defaultSwitchStates = mapOf(
     "gluten" to true,
     "dairy"  to false,
 )
+*/
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,20 +130,28 @@ fun ProfileScreen(
     // Prefer DataStore name; fall back to Firebase displayName
     val resolvedName = userNameVm.ifEmpty { currentUser?.displayName.orEmpty() }
 
+    val focusManager = LocalFocusManager.current
+
     // Local editable state — name initialises once when a non-empty value arrives
     var localName       by remember { mutableStateOf("") }
     LaunchedEffect(resolvedName) {
         if (localName.isEmpty() && resolvedName.isNotEmpty()) localName = resolvedName
     }
+    // Tracks the previous focus state of the name field so we can detect the
+    // focused → unfocused transition and commit the edit at that boundary
+    // (auto-save replaces the old "Save Preferences" button).
+    var nameWasFocused by remember { mutableStateOf(false) }
     // Slider states reset to the persisted value whenever DataStore emits (i.e. after Save)
     var localNotifyDays by remember(notifyDaysVm) { mutableIntStateOf(notifyDaysVm) }
     var localQuietStart by remember(quietStartVm)  { mutableIntStateOf(quietStartVm) }
     var localQuietEnd   by remember(quietEndVm)    { mutableIntStateOf(quietEndVm) }
 
-    // Local-only state (not persisted via DataStore)
+    // HIDDEN(dietary-prefs): in-memory toggle map for the hidden section.
+    /*
     val switchStates = remember {
         mutableStateMapOf(*defaultSwitchStates.entries.map { it.key to it.value }.toTypedArray())
     }
+    */
 
     // Alert-threshold section state. Sensors come from Room via the VM;
     // selectedSensorId follows the dropdown; the three slider values are local
@@ -177,8 +201,20 @@ fun ProfileScreen(
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { innerPadding ->
+        // Tap anywhere in empty area dismisses keyboard / blurs name field.
+        // LazyColumn consumes drag gestures (scrolling) before detectTapGestures
+        // sees them, and child clickables consume their taps too — so this only
+        // fires on whitespace taps, leaving scroll + interactive rows intact.
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .pointerInput(Unit) {
+                    detectTapGestures(onTap = { focusManager.clearFocus() })
+                },
+        ) {
         LazyColumn(
-            modifier       = Modifier.fillMaxSize().padding(innerPadding),
+            modifier       = Modifier.fillMaxSize(),
             contentPadding = PaddingValues(bottom = 32.dp),
         ) {
 
@@ -190,7 +226,7 @@ fun ProfileScreen(
                 )
             }
 
-            // 2. Account — editable display name (persisted on Save)
+            // 2. Account — editable display name (auto-saved on blur)
             item {
                 SectionLabel(title = "ACCOUNT", topPad = 20.dp)
                 ElevatedCard(
@@ -203,11 +239,31 @@ fun ProfileScreen(
                 ) {
                     Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
                         OutlinedTextField(
-                            value         = localName,
-                            onValueChange = { localName = it },
-                            label         = { Text("Display name") },
-                            singleLine    = true,
-                            modifier      = Modifier.fillMaxWidth(),
+                            value           = localName,
+                            onValueChange   = { localName = it },
+                            label           = { Text("Display name") },
+                            singleLine      = true,
+                            // Keyboard "Done" dismisses focus (and the IME)
+                            // without needing to tap anywhere outside.
+                            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                            keyboardActions = KeyboardActions(
+                                onDone = { focusManager.clearFocus() },
+                            ),
+                            modifier        = Modifier
+                                .fillMaxWidth()
+                                // Commit on focus-loss only, so we don't
+                                // hammer DataStore on every keystroke and
+                                // we don't strand the cursor when the user
+                                // taps elsewhere.
+                                .onFocusChanged { state ->
+                                    if (nameWasFocused && !state.isFocused) {
+                                        val trimmed = localName.trim()
+                                        if (trimmed != resolvedName) {
+                                            viewModel.setUserName(trimmed)
+                                        }
+                                    }
+                                    nameWasFocused = state.isFocused
+                                },
                         )
                     }
                 }
@@ -258,118 +314,12 @@ fun ProfileScreen(
                 }
             }
 
-            // 4. Dietary Preferences (local only)
-            item {
-                SectionLabel(title = "DIETARY PREFERENCES")
-                Column(
-                    modifier            = Modifier.padding(horizontal = 16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    dietaryPrefs.forEach { pref ->
-                        DietaryPrefRow(
-                            pref     = pref,
-                            checked  = switchStates[pref.id] == true,
-                            onToggle = { switchStates[pref.id] = it },
-                        )
-                    }
-                }
-            }
-
-            // 5. Expiry Notifications — notify-days-before slider 1–7 (persisted on Save)
-            item {
-                SectionLabel(title = "EXPIRY NOTIFICATIONS")
-                ElevatedCard(
-                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    shape     = RoundedCornerShape(16.dp),
-                    colors    = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
-                    ),
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment     = Alignment.CenterVertically,
-                        ) {
-                            Text(
-                                text  = "Notify me before expiry:",
-                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                                color = MaterialTheme.colorScheme.onSurface,
-                            )
-                            Text(
-                                text  = if (localNotifyDays == 1) "1 day" else "$localNotifyDays days",
-                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Light),
-                                color = SliderActiveGreen,
-                            )
-                        }
-                        Spacer(Modifier.height(8.dp))
-                        // 7 discrete positions (1–7) → steps = 5
-                        Slider(
-                            value         = localNotifyDays.toFloat(),
-                            onValueChange = { localNotifyDays = it.toInt() },
-                            valueRange    = 1f..7f,
-                            steps         = 5,
-                            modifier      = Modifier.fillMaxWidth(),
-                            colors        = presetSliderColors(),
-                        )
-                        Row(
-                            modifier              = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                        ) {
-                            Text(
-                                text  = "1 day",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = SubtitleGrey,
-                            )
-                            Text(
-                                text  = "7 days",
-                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
-                                color = SubtitleGrey,
-                            )
-                        }
-                    }
-                }
-            }
-
-            // 6. Quiet Hours — do-not-disturb window (persisted on Save)
-            item {
-                SectionLabel(title = "QUIET HOURS")
-                ElevatedCard(
-                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                    shape     = RoundedCornerShape(16.dp),
-                    colors    = CardDefaults.elevatedCardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
-                    ),
-                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
-                ) {
-                    Column(modifier = Modifier.padding(20.dp)) {
-                        Text(
-                            text  = "Do Not Disturb",
-                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
-                            color = MaterialTheme.colorScheme.onSurface,
-                        )
-                        Spacer(Modifier.height(16.dp))
-                        HourSliderRow(
-                            label    = "From",
-                            hour     = localQuietStart,
-                            onChange = { localQuietStart = it },
-                        )
-                        Spacer(Modifier.height(12.dp))
-                        HourSliderRow(
-                            label    = "Until",
-                            hour     = localQuietEnd,
-                            onChange = { localQuietEnd = it },
-                        )
-                    }
-                }
-            }
-
-            // 6.5 Master switch for the periodic SensorTickWorker. When OFF,
-            // SmartPantryApp's collector cancels the unique work — sensor
-            // readings stop flowing in, so ShelfLifeRecalcWorker has nothing
-            // to recompute. Thresholds below remain editable but inert
-            // until the switch is flipped back ON.
+            // 3.5 Master switch for the periodic SensorTickWorker. Lives
+            // right under Dark Mode so the two toggle cards group together
+            // visually — same Switch component, same "device-wide behavior"
+            // semantics. SmartPantryApp's collector cancels the unique work
+            // when this is OFF, so thresholds below remain editable but
+            // inert until the switch is flipped back ON.
             item {
                 SectionLabel(title = "BACKGROUND MONITORING")
                 ElevatedCard(
@@ -418,6 +368,132 @@ fun ProfileScreen(
                 }
             }
 
+            // HIDDEN(dietary-prefs): the LazyColumn slot that used to render
+            // the DIETARY PREFERENCES card stack. Section numbering 3 → 5
+            // skips here intentionally — easier to spot than re-numbering.
+            /*
+            // 4. Dietary Preferences (local only)
+            item {
+                SectionLabel(title = "DIETARY PREFERENCES")
+                Column(
+                    modifier            = Modifier.padding(horizontal = 16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    dietaryPrefs.forEach { pref ->
+                        DietaryPrefRow(
+                            pref     = pref,
+                            checked  = switchStates[pref.id] == true,
+                            onToggle = { switchStates[pref.id] = it },
+                        )
+                    }
+                }
+            }
+            */
+
+            // 5. Expiry Notifications — notify-days-before slider 1–7 (persisted on Save)
+            item {
+                SectionLabel(title = "EXPIRY NOTIFICATIONS")
+                ElevatedCard(
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape     = RoundedCornerShape(16.dp),
+                    colors    = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLow,
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 0.dp),
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment     = Alignment.CenterVertically,
+                        ) {
+                            Text(
+                                text  = "Notify me before expiry:",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text  = if (localNotifyDays == 1) "1 day" else "$localNotifyDays days",
+                                style = MaterialTheme.typography.titleLarge.copy(fontWeight = FontWeight.Light),
+                                color = SliderActiveGreen,
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                        // 7 discrete positions (1–7) → steps = 5
+                        Slider(
+                            value                 = localNotifyDays.toFloat(),
+                            onValueChange         = { localNotifyDays = it.toInt() },
+                            // Persist on slider release (one DataStore write per
+                            // drag instead of one per pixel).
+                            onValueChangeFinished = {
+                                viewModel.setNotifyDaysBefore(localNotifyDays)
+                            },
+                            valueRange            = 1f..7f,
+                            steps                 = 5,
+                            modifier              = Modifier.fillMaxWidth(),
+                            colors                = presetSliderColors(),
+                        )
+                        Row(
+                            modifier              = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                        ) {
+                            Text(
+                                text  = "1 day",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = SubtitleGrey,
+                            )
+                            Text(
+                                text  = "7 days",
+                                style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                color = SubtitleGrey,
+                            )
+                        }
+                    }
+                }
+            }
+
+            // 6. Quiet Hours — do-not-disturb window (persisted on Save)
+            item {
+                SectionLabel(title = "QUIET HOURS")
+                ElevatedCard(
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape     = RoundedCornerShape(16.dp),
+                    colors    = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text(
+                            text  = "Do Not Disturb",
+                            style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                            color = MaterialTheme.colorScheme.onSurface,
+                        )
+                        Spacer(Modifier.height(16.dp))
+                        HourSliderRow(
+                            label            = "From",
+                            hour             = localQuietStart,
+                            onChange         = { localQuietStart = it },
+                            // Quiet hours are a paired setting; either slider's
+                            // release commits both current values so persisting
+                            // stays a single atomic call.
+                            onChangeFinished = {
+                                viewModel.setQuietHours(localQuietStart, localQuietEnd)
+                            },
+                        )
+                        Spacer(Modifier.height(12.dp))
+                        HourSliderRow(
+                            label            = "Until",
+                            hour             = localQuietEnd,
+                            onChange         = { localQuietEnd = it },
+                            onChangeFinished = {
+                                viewModel.setQuietHours(localQuietStart, localQuietEnd)
+                            },
+                        )
+                    }
+                }
+            }
+
             // 7. Per-sensor alert thresholds (temperature / humidity / light).
             // Persisted to SensorConfigEntity → drives both the chart threshold
             // line + per-segment colour AND the SensorTickWorker breach flag.
@@ -449,67 +525,63 @@ fun ProfileScreen(
 
                         Spacer(Modifier.height(16.dp))
 
-                        ThresholdSlider(
-                            label      = "Temperature alert above",
-                            value      = localTempC,
-                            valueLabel = "${localTempC.toInt()}°C",
-                            range      = -25f..50f,
-                            // 75 discrete °C positions → steps = range size - 1
-                            steps      = 74,
-                            minLabel   = "−25°C",
-                            maxLabel   = "50°C",
-                            onChange   = { localTempC = it },
-                        )
-
-                        Spacer(Modifier.height(12.dp))
-
-                        ThresholdSlider(
-                            label      = "Humidity alert above",
-                            value      = localHumidity,
-                            valueLabel = "${localHumidity.toInt()}%",
-                            range      = 0f..100f,
-                            steps      = 99,
-                            minLabel   = "0%",
-                            maxLabel   = "100%",
-                            onChange   = { localHumidity = it },
-                        )
-
-                        Spacer(Modifier.height(12.dp))
-
-                        ThresholdSlider(
-                            label      = "Light alert above",
-                            value      = localMaxLux,
-                            valueLabel = "${localMaxLux.toInt()} lx",
-                            range      = 0f..1000f,
-                            // 50-lux granularity → 20 steps between min/max
-                            steps      = 19,
-                            minLabel   = "0 lx",
-                            maxLabel   = "1000 lx",
-                            onChange   = { localMaxLux = it },
-                        )
-
-                        Spacer(Modifier.height(16.dp))
-
-                        Button(
-                            onClick  = {
-                                selectedSensor?.let {
-                                    viewModel.saveSensorThresholds(
-                                        sensorId          = it.id,
-                                        thresholdC        = localTempC,
-                                        humidityThreshold = localHumidity,
-                                        maxLux            = localMaxLux,
-                                    )
-                                }
-                            },
-                            enabled  = selectedSensor != null,
-                            modifier = Modifier.fillMaxWidth().height(48.dp),
-                            shape    = RoundedCornerShape(12.dp),
-                        ) {
-                            Text(
-                                text  = "Save Thresholds",
-                                style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                            )
+                        // All three sliders share one persist call —
+                        // saveSensorThresholds writes the row atomically, so on
+                        // any slider's release we pass the latest values of all
+                        // three to avoid a half-saved threshold set.
+                        val persistThresholds = {
+                            selectedSensor?.let {
+                                viewModel.saveSensorThresholds(
+                                    sensorId          = it.id,
+                                    thresholdC        = localTempC,
+                                    humidityThreshold = localHumidity,
+                                    maxLux            = localMaxLux,
+                                )
+                            }
+                            Unit
                         }
+
+                        ThresholdSlider(
+                            label            = "Temperature alert above",
+                            value            = localTempC,
+                            valueLabel       = "${localTempC.toInt()}°C",
+                            range            = -25f..50f,
+                            // 75 discrete °C positions → steps = range size - 1
+                            steps            = 74,
+                            minLabel         = "−25°C",
+                            maxLabel         = "50°C",
+                            onChange         = { localTempC = it },
+                            onChangeFinished = persistThresholds,
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        ThresholdSlider(
+                            label            = "Humidity alert above",
+                            value            = localHumidity,
+                            valueLabel       = "${localHumidity.toInt()}%",
+                            range            = 0f..100f,
+                            steps            = 99,
+                            minLabel         = "0%",
+                            maxLabel         = "100%",
+                            onChange         = { localHumidity = it },
+                            onChangeFinished = persistThresholds,
+                        )
+
+                        Spacer(Modifier.height(12.dp))
+
+                        ThresholdSlider(
+                            label            = "Light alert above",
+                            value            = localMaxLux,
+                            valueLabel       = "${localMaxLux.toInt()} lx",
+                            range            = 0f..1000f,
+                            // 50-lux granularity → 20 steps between min/max
+                            steps            = 19,
+                            minLabel         = "0 lx",
+                            maxLabel         = "1000 lx",
+                            onChange         = { localMaxLux = it },
+                            onChangeFinished = persistThresholds,
+                        )
                     }
                 }
             }
@@ -537,23 +609,10 @@ fun ProfileScreen(
                     }
                     // TODO-TEST: end of test button
 
-                    Button(
-                        onClick  = {
-                            viewModel.setUserName(localName)
-                            viewModel.setNotifyDaysBefore(localNotifyDays)
-                            viewModel.setQuietHours(localQuietStart, localQuietEnd)
-                        },
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape    = RoundedCornerShape(12.dp),
-                        colors   = ButtonDefaults.buttonColors(
-                            containerColor = MaterialTheme.colorScheme.primary,
-                        ),
-                    ) {
-                        Text(
-                            text  = "Save Preferences",
-                            style = MaterialTheme.typography.labelLarge.copy(fontWeight = FontWeight.SemiBold),
-                        )
-                    }
+                    // "Save Preferences" / "Save Thresholds" buttons removed
+                    // 2026-05-20: all settings auto-persist (toggles on change,
+                    // sliders on release, name on focus-loss). One less thing
+                    // for users to remember, no "I forgot to save" data loss.
 
                     Spacer(Modifier.height(8.dp))
 
@@ -592,13 +651,19 @@ fun ProfileScreen(
                 }
             }
         }
+        } // close outer pointerInput Box
     }
 }
 
 // Hour slider row used by the Quiet Hours section
 
 @Composable
-private fun HourSliderRow(label: String, hour: Int, onChange: (Int) -> Unit) {
+private fun HourSliderRow(
+    label: String,
+    hour: Int,
+    onChange: (Int) -> Unit,
+    onChangeFinished: () -> Unit,
+) {
     Row(
         modifier              = Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
@@ -617,12 +682,13 @@ private fun HourSliderRow(label: String, hour: Int, onChange: (Int) -> Unit) {
     }
     // 24 discrete positions (0–23) → steps = 22
     Slider(
-        value         = hour.toFloat(),
-        onValueChange = { onChange(it.toInt()) },
-        valueRange    = 0f..23f,
-        steps         = 22,
-        modifier      = Modifier.fillMaxWidth(),
-        colors        = presetSliderColors(),
+        value                 = hour.toFloat(),
+        onValueChange         = { onChange(it.toInt()) },
+        onValueChangeFinished = onChangeFinished,
+        valueRange            = 0f..23f,
+        steps                 = 22,
+        modifier              = Modifier.fillMaxWidth(),
+        colors                = presetSliderColors(),
     )
 }
 
@@ -700,6 +766,7 @@ private fun ThresholdSlider(
     minLabel: String,
     maxLabel: String,
     onChange: (Float) -> Unit,
+    onChangeFinished: () -> Unit,
 ) {
     Column {
         Row(
@@ -719,12 +786,13 @@ private fun ThresholdSlider(
             )
         }
         Slider(
-            value         = value,
-            onValueChange = onChange,
-            valueRange    = range,
-            steps         = steps,
-            modifier      = Modifier.fillMaxWidth(),
-            colors        = presetSliderColors(),
+            value                 = value,
+            onValueChange         = onChange,
+            onValueChangeFinished = onChangeFinished,
+            valueRange            = range,
+            steps                 = steps,
+            modifier              = Modifier.fillMaxWidth(),
+            colors                = presetSliderColors(),
         )
         Row(
             modifier              = Modifier.fillMaxWidth(),
@@ -796,6 +864,8 @@ private fun SectionLabel(title: String, topPad: Dp = 20.dp) {
     )
 }
 
+// HIDDEN(dietary-prefs): row composable for the hidden section.
+/*
 // Dietary preference row
 
 @Composable
@@ -843,6 +913,7 @@ private fun DietaryPrefRow(pref: DietPref, checked: Boolean, onToggle: (Boolean)
         }
     }
 }
+*/
 
 // Previews
 
