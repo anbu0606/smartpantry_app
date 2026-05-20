@@ -2,6 +2,7 @@ package com.lab03g10.smartpantry.data.repository
 
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.FirebaseUser
+import com.google.firebase.auth.GoogleAuthProvider
 import com.google.firebase.auth.UserProfileChangeRequest
 import com.lab03g10.smartpantry.domain.repo.AuthRepository
 import kotlinx.coroutines.channels.awaitClose
@@ -56,6 +57,16 @@ class AuthRepositoryImpl @Inject constructor(
             // the Firestore security rule evaluates the read.
             backupRepository.pullSnapshot(user.uid)
             Result.success(user)
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    override suspend fun signInWithGoogle(idToken: String): Result<FirebaseUser?> {
+        return try {
+            val credential = GoogleAuthProvider.getCredential(idToken, null)
+            val result = firebaseAuth.signInWithCredential(credential).await()
+            Result.success(result.user)
         } catch (e: Exception) {
             Result.failure(e)
         }

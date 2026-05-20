@@ -118,4 +118,9 @@ dependencies {
 
 // Coil for product images
     implementation(libs.coil.compose)
+
+// Google Sign-In via Credential Manager
+    implementation(libs.androidx.credentials)
+    implementation(libs.androidx.credentials.play.services)
+    implementation(libs.google.identity.googleid)
 }
