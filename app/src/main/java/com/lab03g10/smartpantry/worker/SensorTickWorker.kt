@@ -13,6 +13,7 @@ import com.lab03g10.smartpantry.data.local.entity.SensorReadingEntity
 import com.lab03g10.smartpantry.data.sensor.SensorSimulator
 import com.lab03g10.smartpantry.domain.repo.NotificationRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
+import com.lab03g10.smartpantry.notification.SensorBreachNotifier
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import kotlinx.coroutines.flow.first
@@ -30,6 +31,7 @@ class SensorTickWorker @AssistedInject constructor(
     private val simulator: SensorSimulator,
     private val sensorRepo: SensorRepository,
     private val notifRepo: NotificationRepository,
+    private val breachNotifier: SensorBreachNotifier,
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result = try {
@@ -46,6 +48,11 @@ class SensorTickWorker @AssistedInject constructor(
         val now = System.currentTimeMillis()
         for (config in configs) {
             simulator.load(config.id, config.csvAssetName)
+            // Capture the previous flag BEFORE inserting the new reading so
+            // we can edge-detect a clean→breach transition. Without this,
+            // every 15-minute tick during a sustained breach would re-fire
+            // the system notification (and re-insert an in-app row).
+            val previousFlag = latestBySensor[config.id]?.breachFlag ?: 0
             val nextTs = latestBySensor[config.id]
                 ?.let { maxOf(now, it.timestamp + TICK_INTERVAL_MS) }
                 ?: now
@@ -54,19 +61,24 @@ class SensorTickWorker @AssistedInject constructor(
             val reading = raw.copy(breachFlag = flag)
             sensorRepo.insertReading(reading)
 
-            if (flag != 0) {
+            // Only act on edge transitions (was clean, now breaching).
+            // Keeps both the in-app log and the system shade quiet during a
+            // sustained breach; the user already saw the alert at onset.
+            if (flag != 0 && previousFlag == 0) {
+                val body = describeBreach(reading, config, flag)
                 notifRepo.insert(
                     NotificationEntity(
                         id = UUID.randomUUID().toString(),
                         type = "SENSOR_BREACH",
                         title = "${config.displayName} alert",
-                        body = describeBreach(reading, config, flag),
+                        body = body,
                         relatedFoodId = null,
                         relatedSensorId = config.id,
                         createdAt = System.currentTimeMillis(),
                         read = false,
                     )
                 )
+                breachNotifier.notifyBreach(config, body)
             }
         }
         // Chain: trigger shelf-life recalculation with fresh readings.
