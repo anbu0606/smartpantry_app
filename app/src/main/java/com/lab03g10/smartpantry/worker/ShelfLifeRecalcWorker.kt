@@ -43,11 +43,14 @@ class ShelfLifeRecalcWorker @AssistedInject constructor(
             val foods = foodRepo.findActiveByStorageLocation(config.id)
             if (foods.isEmpty()) continue
 
-            // Lookback: from the earliest purchaseDate among these foods, or 7 days ago,
-            // whichever is more recent (caps query size for long-running sensors).
-            val earliestPurchase = foods.minOf { it.purchaseDate }
+            // Lookback floor: for each food we use whichever is later —
+            // when it was bought, or when it was moved into this sensor.
+            // Without `storageChangedAt`, a food just moved from a colder
+            // location would have the destination sensor's older readings
+            // applied as if it had been there the whole time.
+            val earliestFloor = foods.minOf { foodFloor(it) }
             val lookbackFloor = now - LOOKBACK_WINDOW_MS
-            val since = maxOf(earliestPurchase, lookbackFloor)
+            val since = maxOf(earliestFloor, lookbackFloor)
 
             val readings = sensorRepo.getReadingsForSensorSince(config.id, since)
             if (readings.isEmpty()) continue
@@ -55,9 +58,10 @@ class ShelfLifeRecalcWorker @AssistedInject constructor(
             val stress = engine.analyse(config, readings)
 
             for (food in foods) {
-                // Filter readings to only those after this food's purchase date
-                val foodReadings = if (food.purchaseDate > since) {
-                    readings.filter { it.timestamp >= food.purchaseDate }
+                val floor = foodFloor(food)
+                // Filter readings to only those after this food's effective floor
+                val foodReadings = if (floor > since) {
+                    readings.filter { it.timestamp >= floor }
                 } else {
                     readings
                 }
@@ -78,6 +82,9 @@ class ShelfLifeRecalcWorker @AssistedInject constructor(
             }
         }
     }
+
+    private fun foodFloor(food: com.lab03g10.smartpantry.data.local.entity.FoodItemEntity): Long =
+        maxOf(food.purchaseDate, food.storageChangedAt)
 
     companion object {
         /** Maximum lookback window: 7 days of readings. */

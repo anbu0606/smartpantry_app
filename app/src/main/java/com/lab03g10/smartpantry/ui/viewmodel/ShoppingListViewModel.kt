@@ -15,6 +15,7 @@ import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import com.lab03g10.smartpantry.domain.repo.ShoppingRepository
 import com.lab03g10.smartpantry.domain.repo.WasteRepository
+import com.lab03g10.smartpantry.worker.ShelfLifeRecalcScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.launch
 import java.util.UUID
@@ -64,6 +65,7 @@ class ShoppingListViewModel @Inject constructor(
     private val preferenceRepository: PreferenceRepository,
     private val foodRepository: FoodRepository,
     private val sensorRepository: SensorRepository,
+    private val recalcScheduler: ShelfLifeRecalcScheduler,
 ) : ViewModel() {
 
     companion object {
@@ -244,6 +246,7 @@ class ShoppingListViewModel @Inject constructor(
         viewModelScope.launch {
 
             val now = System.currentTimeMillis()
+            var anyTransferred = false
 
             // Loop through all shopping items
             for (item in savedShoppingItems) {
@@ -277,6 +280,7 @@ class ShoppingListViewModel @Inject constructor(
                         nominalExpiryDate = item.nominalExpiryDate,
                         effectiveExpiryDate = item.nominalExpiryDate,
                         storageLocationId = item.storageLocationId,
+                        storageChangedAt = now,
                         notes = null,
                         createdAt = now,
                         updatedAt = now,
@@ -284,10 +288,15 @@ class ShoppingListViewModel @Inject constructor(
                         wasted = false,
                     )
                     foodRepository.upsert(foodItem)
+                    anyTransferred = true
 
                     shoppingRepository.delete(item.id)
                 }
             }
+
+            // One recalc pass picks up every newly inserted food item;
+            // REPLACE policy dedupes if a SensorTickWorker also triggered.
+            if (anyTransferred) recalcScheduler.triggerOnce()
         }
     }
 

@@ -8,6 +8,7 @@ import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
 import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
 import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
+import com.lab03g10.smartpantry.worker.ShelfLifeRecalcScheduler
 import dagger.hilt.android.lifecycle.HiltViewModel
 import java.util.Calendar
 import java.util.UUID
@@ -68,6 +69,7 @@ class AddEditFoodViewModel @Inject constructor(
     savedStateHandle: SavedStateHandle,
     private val foodRepository: FoodRepository,
     sensorRepository: SensorRepository,
+    private val recalcScheduler: ShelfLifeRecalcScheduler,
 ) : ViewModel() {
 
     private val foodId: String? = savedStateHandle["foodId"]
@@ -145,6 +147,8 @@ class AddEditFoodViewModel @Inject constructor(
         viewModelScope.launch {
             val now = System.currentTimeMillis()
             val existing = current.foodId?.let { foodRepository.observeById(it).firstOrNull() }
+            val storageChanged =
+                existing != null && existing.storageLocationId != current.storageLocationId
             val item = FoodItemEntity(
                 id = current.foodId ?: UUID.randomUUID().toString(),
                 name = current.name.trim(),
@@ -163,14 +167,26 @@ class AddEditFoodViewModel @Inject constructor(
                 //   C — edit mode but expiry untouched: preserve the worker's
                 //       computed effective value so context-aware recalculation
                 //       isn't silently undone by a no-op edit-save.
+                //   Storage move special-case: drop back to nominal too, so the
+                //   worker can reaccumulate stress from the new sensor's history
+                //   forward without compounding the previous location's drift.
                 effectiveExpiryDate = when {
                     !current.isEditMode -> current.nominalExpiryDate ?: now
+                    storageChanged -> current.nominalExpiryDate ?: now
                     current.nominalExpiryDate != null
                         && current.nominalExpiryDate != existing?.nominalExpiryDate ->
                             current.nominalExpiryDate
                     else -> existing?.effectiveExpiryDate ?: current.nominalExpiryDate ?: now
                 },
                 storageLocationId = current.storageLocationId,
+                // Stamp the move time so ShelfLifeRecalcWorker's lookback
+                // floor for this food jumps to "now" — destination-sensor
+                // history older than the move is excluded from stress calc.
+                storageChangedAt = when {
+                    !current.isEditMode -> now
+                    storageChanged -> now
+                    else -> existing?.storageChangedAt ?: now
+                },
                 notes = current.notes.trim().takeIf { it.isNotBlank() },
                 createdAt = existing?.createdAt ?: now,
                 updatedAt = now,
@@ -178,6 +194,9 @@ class AddEditFoodViewModel @Inject constructor(
                 wasted = existing?.wasted ?: false,
             )
             foodRepository.upsert(item)
+            // Immediate recalc on move so the user doesn't wait up to
+            // 15 min for the next periodic tick to refresh expiry.
+            if (storageChanged) recalcScheduler.triggerOnce()
             form.update { it.copy(isSaved = true) }
         }
     }
