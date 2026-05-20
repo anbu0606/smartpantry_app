@@ -46,6 +46,7 @@ class PreferenceRepositoryImpl @Inject constructor(
         val QUIET_HOURS_END = intPreferencesKey("quiet_hours_end")
         val ONBOARDING_COMPLETED = booleanPreferencesKey("onboarding_completed")
         val USER_NAME = stringPreferencesKey("user_name")
+        val SENSOR_MONITORING_ENABLED = booleanPreferencesKey("sensor_monitoring_enabled")
     }
 
     /*
@@ -192,6 +193,17 @@ class PreferenceRepositoryImpl @Inject constructor(
     override suspend fun setUserName(name: String) {
         context.smartPantryDataStore.edit { preferences ->
             preferences[PreferencesKeys.USER_NAME] = name
+        }
+    }
+
+    override fun observeSensorMonitoringEnabled(): Flow<Boolean> =
+        context.smartPantryDataStore.data.map { preferences ->
+            preferences[PreferencesKeys.SENSOR_MONITORING_ENABLED] ?: true
+        }
+
+    override suspend fun setSensorMonitoringEnabled(enabled: Boolean) {
+        context.smartPantryDataStore.edit { preferences ->
+            preferences[PreferencesKeys.SENSOR_MONITORING_ENABLED] = enabled
         }
     }
 }

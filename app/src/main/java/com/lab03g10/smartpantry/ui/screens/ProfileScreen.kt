@@ -106,6 +106,7 @@ fun ProfileScreen(
     val quietEndVm      by viewModel.quietHoursEnd.collectAsState()
     val userNameVm      by viewModel.userName.collectAsState()
     val currentUser     by viewModel.currentUser.collectAsState()
+    val isMonitoring    by viewModel.isSensorMonitoringEnabled.collectAsState()
 
     // Prefer DataStore name; fall back to Firebase displayName
     val resolvedName = userNameVm.ifEmpty { currentUser?.displayName.orEmpty() }
@@ -356,6 +357,59 @@ fun ProfileScreen(
                             label    = "Until",
                             hour     = localQuietEnd,
                             onChange = { localQuietEnd = it },
+                        )
+                    }
+                }
+            }
+
+            // 6.5 Master switch for the periodic SensorTickWorker. When OFF,
+            // SmartPantryApp's collector cancels the unique work — sensor
+            // readings stop flowing in, so ShelfLifeRecalcWorker has nothing
+            // to recompute. Thresholds below remain editable but inert
+            // until the switch is flipped back ON.
+            item {
+                SectionLabel(title = "BACKGROUND MONITORING")
+                ElevatedCard(
+                    modifier  = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    shape     = RoundedCornerShape(16.dp),
+                    colors    = CardDefaults.elevatedCardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+                    ),
+                    elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+                ) {
+                    Row(
+                        modifier              = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment     = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Column(modifier = Modifier.weight(1f).padding(end = 12.dp)) {
+                            Text(
+                                text  = "Sensor Monitoring",
+                                style = MaterialTheme.typography.bodyLarge.copy(fontWeight = FontWeight.Medium),
+                                color = MaterialTheme.colorScheme.onSurface,
+                            )
+                            Text(
+                                text  = if (isMonitoring) {
+                                    "Sensor data refreshes every 15 minutes; expiry dates auto-adjust."
+                                } else {
+                                    "Paused — sensor readings won't update and shelf-life stays at the printed expiry."
+                                },
+                                style = MaterialTheme.typography.bodySmall,
+                                color = SubtitleGrey,
+                            )
+                        }
+                        Switch(
+                            checked         = isMonitoring,
+                            onCheckedChange = { viewModel.setSensorMonitoringEnabled(it) },
+                            colors          = SwitchDefaults.colors(
+                                checkedThumbColor    = Color.White,
+                                checkedTrackColor    = SliderActiveGreen,
+                                uncheckedThumbColor  = Color.White,
+                                uncheckedTrackColor  = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                uncheckedBorderColor = MaterialTheme.colorScheme.outline,
+                            ),
                         )
                     }
                 }

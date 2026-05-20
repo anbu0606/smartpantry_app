@@ -60,6 +60,22 @@ class ProfileViewModel @Inject constructor(
         8
     )
 
+    // Master switch state for the periodic SensorTickWorker. The actual
+    // schedule/cancel side-effect is driven by SmartPantryApp's collector
+    // on this same flow, so this VM only writes the preference.
+    val isSensorMonitoringEnabled: StateFlow<Boolean> =
+        preferenceRepository.observeSensorMonitoringEnabled().stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            true,
+        )
+
+    fun setSensorMonitoringEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferenceRepository.setSensorMonitoringEnabled(enabled)
+        }
+    }
+
     fun setDarkMode(enabled: Boolean) {
         viewModelScope.launch {
             preferenceRepository.setDarkMode(enabled)
