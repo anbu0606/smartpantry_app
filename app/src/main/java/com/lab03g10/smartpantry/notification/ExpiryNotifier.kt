@@ -1,9 +1,6 @@
 package com.lab03g10.smartpantry.notification
 
-import android.Manifest
 import android.content.Context
-import android.content.pm.PackageManager
-import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import com.lab03g10.smartpantry.domain.repo.FoodRepository
@@ -19,10 +16,10 @@ class ExpiryNotifier @Inject constructor(
     @ApplicationContext private val context: Context,
     private val foodRepository: FoodRepository,
     private val preferenceRepository: PreferenceRepository,
+    private val guard: NotificationGuard,
 ) {
     suspend fun notifyExpiringItems() {
-        if (!hasPostNotificationsPermission()) return
-        if (isInQuietHours()) return
+        if (guard.suppress()) return
 
         val notifyDaysBefore = preferenceRepository.observeNotifyDaysBefore().first()
         val startOfToday = startOfDay()
@@ -48,19 +45,6 @@ class ExpiryNotifier @Inject constructor(
                 .build()
             nm.notify(item.id.hashCode(), notification)
         }
-    }
-
-    private fun hasPostNotificationsPermission(): Boolean {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return true
-        return context.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) ==
-            PackageManager.PERMISSION_GRANTED
-    }
-
-    private suspend fun isInQuietHours(): Boolean {
-        val start = preferenceRepository.observeQuietHoursStart().first()
-        val end = preferenceRepository.observeQuietHoursEnd().first()
-        val hour = Calendar.getInstance().get(Calendar.HOUR_OF_DAY)
-        return if (start <= end) hour in start until end else hour >= start || hour < end
     }
 
     private fun startOfDay(): Long = Calendar.getInstance().apply {

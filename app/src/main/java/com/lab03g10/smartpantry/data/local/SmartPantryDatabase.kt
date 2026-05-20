@@ -34,7 +34,11 @@ import com.lab03g10.smartpantry.data.local.entity.*
     //   (FK→sensors, SET_NULL) so the transferred FoodItemEntity is
     //   assigned to a sensor zone and ShelfLifeRecalcWorker can adjust
     //   its effectiveExpiryDate from sensor history.
-    version = 5,
+    // v6 (2026-05-20): FoodItemEntity gained `storageChangedAt`. The
+    //   recalc worker uses it as the readings lower bound so a food
+    //   item that's just been moved doesn't get stress applied from
+    //   the destination sensor's pre-move history.
+    version = 6,
     // matches the ksp { arg("room.schemaLocation", ...) } from Day 1
     exportSchema = true,
 )

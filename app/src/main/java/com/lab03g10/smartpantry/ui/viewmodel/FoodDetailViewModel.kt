@@ -6,6 +6,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
 import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
+import com.lab03g10.smartpantry.data.local.entity.SensorReadingEntity
 import com.lab03g10.smartpantry.data.local.entity.WasteLogEntity
 import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
@@ -23,6 +24,12 @@ import kotlinx.coroutines.launch
 data class FoodDetailUiState(
     val item: FoodItemEntity? = null,
     val storageLocation: SensorConfigEntity? = null,
+    // Latest sensor reading for the food's storage location. null when
+    // the food is unmonitored OR the sensor hasn't produced any readings
+    // yet (e.g. user just added a new sensor and SensorTickWorker
+    // hasn't fired its first tick). The UI shows an "awaiting first
+    // reading" hint instead of fake config-derived values.
+    val latestReading: SensorReadingEntity? = null,
     val isLoading: Boolean = true,
 )
 
@@ -40,10 +47,13 @@ class FoodDetailViewModel @Inject constructor(
     val state: StateFlow<FoodDetailUiState> = combine(
         foodRepository.observeById(foodId),
         sensorRepository.observeConfigs(),
-    ) { item, sensors ->
+        sensorRepository.observeLatestPerSensor(),
+    ) { item, sensors, latestReadings ->
+        val storage = sensors.firstOrNull { it.id == item?.storageLocationId }
         FoodDetailUiState(
             item = item,
-            storageLocation = sensors.firstOrNull { it.id == item?.storageLocationId },
+            storageLocation = storage,
+            latestReading = storage?.let { s -> latestReadings.firstOrNull { it.sensorId == s.id } },
             isLoading = false,
         )
     }.stateIn(

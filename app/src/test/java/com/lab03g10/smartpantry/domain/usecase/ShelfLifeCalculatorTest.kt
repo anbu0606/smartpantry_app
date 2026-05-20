@@ -43,6 +43,7 @@ class ShelfLifeCalculatorTest {
         nominalExpiryDate = nominalExpiryDate,
         effectiveExpiryDate = effectiveExpiryDate,
         storageLocationId = "f1",
+        storageChangedAt = purchaseDate,
         notes = null,
         createdAt = purchaseDate,
         updatedAt = purchaseDate,

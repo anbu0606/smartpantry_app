@@ -39,6 +39,12 @@ data class FoodItemEntity(
     val effectiveExpiryDate: Long,
     // FK to sensors.id; null = item in unmonitored storage
     val storageLocationId: String?,
+    // Epoch millis when storageLocationId was last set / changed. Used by
+    // ShelfLifeRecalcWorker as the lower bound for the readings query, so
+    // stress from a previous storage location is not applied to readings
+    // collected after the food has been moved. Defaults to createdAt at
+    // first insert.
+    val storageChangedAt: Long,
     val notes: String?,
     val createdAt: Long,
     val updatedAt: Long,

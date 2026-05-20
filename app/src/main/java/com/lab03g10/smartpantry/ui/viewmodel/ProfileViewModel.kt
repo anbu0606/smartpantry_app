@@ -8,8 +8,10 @@ import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
 import com.lab03g10.smartpantry.notification.ExpiryNotifier // TODO-TEST: remove before submission
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.firstOrNull
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
@@ -60,6 +62,22 @@ class ProfileViewModel @Inject constructor(
         8
     )
 
+    // Master switch state for the periodic SensorTickWorker. The actual
+    // schedule/cancel side-effect is driven by SmartPantryApp's collector
+    // on this same flow, so this VM only writes the preference.
+    val isSensorMonitoringEnabled: StateFlow<Boolean> =
+        preferenceRepository.observeSensorMonitoringEnabled().stateIn(
+            viewModelScope,
+            SharingStarted.WhileSubscribed(5000),
+            true,
+        )
+
+    fun setSensorMonitoringEnabled(enabled: Boolean) {
+        viewModelScope.launch {
+            preferenceRepository.setSensorMonitoringEnabled(enabled)
+        }
+    }
+
     fun setDarkMode(enabled: Boolean) {
         viewModelScope.launch {
             preferenceRepository.setDarkMode(enabled)
@@ -89,8 +107,26 @@ class ProfileViewModel @Inject constructor(
         viewModelScope.launch { preferenceRepository.setUserName(name) }
     }
 
-    fun signOut() {
-        authRepository.signOut()
+    private val _isSigningOut = MutableStateFlow(false)
+
+    /**
+     * True while [signOut] is awaiting BackupRepository.pushSnapshot —
+     * the Sign Out button binds to this to show a spinner and disable
+     * itself, blocking the user from triggering a second sign-out
+     * (and the navigation callback) before the push completes.
+     */
+    val isSigningOut: StateFlow<Boolean> = _isSigningOut.asStateFlow()
+
+    fun signOut(onComplete: () -> Unit) {
+        viewModelScope.launch {
+            _isSigningOut.value = true
+            authRepository.signOut()
+            _isSigningOut.value = false
+            // Navigate only after push + auth-clear finish; ProfileScreen
+            // will tear down here, cancelling viewModelScope, which is fine
+            // since the suspending work has already returned.
+            onComplete()
+        }
     }
 
     // TODO-TEST: remove this function before submission

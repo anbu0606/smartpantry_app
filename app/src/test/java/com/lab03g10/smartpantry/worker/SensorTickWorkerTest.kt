@@ -19,6 +19,7 @@ class SensorTickWorkerTest {
         deviceId = "dev-1",
         environmentType = "REFRIGERATOR",
         thresholdC = 7.0f,
+        humidityThreshold = 70.0f,
         maxLux = 50.0f,
         csvAssetName = "fridge.csv",
         pairedAt = 0L,

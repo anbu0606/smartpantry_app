@@ -6,6 +6,7 @@ import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
 import com.lab03g10.smartpantry.data.local.entity.SensorReadingEntity
 import com.lab03g10.smartpantry.domain.repo.FoodRepository
 import com.lab03g10.smartpantry.domain.repo.SensorRepository
+import com.lab03g10.smartpantry.worker.ShelfLifeRecalcScheduler
 import junit.framework.TestCase.assertEquals
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -70,6 +71,10 @@ class AddEditFoodViewModelSaveTest {
     // ---- fakes -------------------------------------------------------------
     private val foodRepo = FakeFoodRepository()
     private val sensorRepo = FakeSensorRepository()
+    private val recalcScheduler = object : ShelfLifeRecalcScheduler {
+        var triggerCount = 0
+        override fun triggerOnce() { triggerCount += 1 }
+    }
 
     // ---- Case C — the regression itself ------------------------------------
     @Test
@@ -86,6 +91,7 @@ class AddEditFoodViewModelSaveTest {
             savedStateHandle = SavedStateHandle(mapOf("foodId" to "milk-1")),
             foodRepository = foodRepo,
             sensorRepository = sensorRepo,
+            recalcScheduler = recalcScheduler,
         )
         // init { } loads existing into the form synchronously under UnconfinedTestDispatcher
 
@@ -118,6 +124,7 @@ class AddEditFoodViewModelSaveTest {
             savedStateHandle = SavedStateHandle(mapOf("foodId" to "milk-1")),
             foodRepository = foodRepo,
             sensorRepository = sensorRepo,
+            recalcScheduler = recalcScheduler,
         )
         vm.onExpiryDateChange(userChangedExpiry)   // user actively shifts expiry
         vm.save()
@@ -139,6 +146,7 @@ class AddEditFoodViewModelSaveTest {
             savedStateHandle = SavedStateHandle(emptyMap()),
             foodRepository = foodRepo,
             sensorRepository = sensorRepo,
+            recalcScheduler = recalcScheduler,
         )
 
         vm.onNameChange("Spinach")
@@ -170,6 +178,7 @@ class AddEditFoodViewModelSaveTest {
         nominalExpiryDate = nominalExpiryDate,
         effectiveExpiryDate = effectiveExpiryDate,
         storageLocationId = "sensor-fridge",
+        storageChangedAt = todayUtc - 2 * day,
         notes = null,
         createdAt = todayUtc - 2 * day,
         updatedAt = todayUtc - 2 * day,
@@ -206,6 +215,7 @@ private class FakeFoodRepository : FoodRepository {
     override suspend fun markWasted(id: String) = error("not used")
     override suspend fun findActiveByStorageLocation(sensorId: String): List<FoodItemEntity> = error("not used")
     override suspend fun updateEffectiveExpiry(id: String, effectiveExpiryDate: Long) = error("not used")
+    override suspend fun findExpiringBetween(startEpoch: Long, endEpoch: Long): List<FoodItemEntity> = error("not used")
 }
 
 private class FakeSensorRepository : SensorRepository {

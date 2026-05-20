@@ -47,6 +47,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.lab03g10.smartpantry.data.local.entity.FoodItemEntity
 import com.lab03g10.smartpantry.data.local.entity.SensorConfigEntity
+import com.lab03g10.smartpantry.data.local.entity.SensorReadingEntity
 import com.lab03g10.smartpantry.ui.components.TemperatureCard
 import com.lab03g10.smartpantry.ui.theme.SmartPantryTheme
 import com.lab03g10.smartpantry.ui.util.daysUntil
@@ -145,6 +146,7 @@ fun FoodDetailScreen(
                 FoodDetailContent(
                     item = item,
                     storageLocation = state.storageLocation,
+                    latestReading = state.latestReading,
                     onMarkConsumed = {
                         viewModel.markConsumed()
                         onNavigateBack()
@@ -209,6 +211,7 @@ fun FoodDetailScreen(
 private fun FoodDetailContent(
     item: FoodItemEntity,
     storageLocation: SensorConfigEntity?,
+    latestReading: SensorReadingEntity?,
     onMarkConsumed: () -> Unit,
     onMarkWasted: () -> Unit,
     modifier: Modifier = Modifier,
@@ -334,13 +337,17 @@ private fun FoodDetailContent(
         if (storageLocation != null) {
             item { SectionLabel(text = "STORAGE ENVIRONMENT") }
             item {
-                TemperatureCard(
-                    locationName = storageLocation.displayName,
-                    temperature = storageLocation.thresholdC,
-                    humidity = 60f,
-                    lux = storageLocation.maxLux,
-                    isNormal = true,
-                )
+                if (latestReading != null) {
+                    TemperatureCard(
+                        locationName = storageLocation.displayName,
+                        temperature = latestReading.temperatureC,
+                        humidity = latestReading.humidity,
+                        lux = latestReading.lux,
+                        isNormal = latestReading.breachFlag == 0,
+                    )
+                } else {
+                    AwaitingReadingCard(locationName = storageLocation.displayName)
+                }
             }
         }
 
@@ -434,6 +441,50 @@ private fun DetailRow(
                 valueColor
             },
         )
+    }
+}
+
+/**
+ * Fallback shown when a food has a storage location but the sensor
+ * has not produced any readings yet (newly paired sensor, or the
+ * 15-min SensorTickWorker hasn't fired since pairing). Avoids
+ * showing the configured threshold values as if they were live data.
+ */
+@Composable
+private fun AwaitingReadingCard(locationName: String) {
+    ElevatedCard(
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.elevatedCardColors(
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
+        ),
+        elevation = CardDefaults.elevatedCardElevation(defaultElevation = 1.dp),
+    ) {
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+        ) {
+            Text(
+                text = locationName.uppercase(),
+                style = MaterialTheme.typography.labelSmall.copy(
+                    fontWeight = FontWeight.Medium,
+                    letterSpacing = 1.sp,
+                ),
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Text(
+                text = "Awaiting first reading",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurface,
+            )
+            Text(
+                text = "Live temperature / humidity / light will show " +
+                        "here after the next sensor tick.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
     }
 }
 
