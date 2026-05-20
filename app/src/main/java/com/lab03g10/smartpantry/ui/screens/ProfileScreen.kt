@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -21,6 +22,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -107,6 +109,7 @@ fun ProfileScreen(
     val userNameVm      by viewModel.userName.collectAsState()
     val currentUser     by viewModel.currentUser.collectAsState()
     val isMonitoring    by viewModel.isSensorMonitoringEnabled.collectAsState()
+    val isSigningOut    by viewModel.isSigningOut.collectAsState()
 
     // Prefer DataStore name; fall back to Firebase displayName
     val resolvedName = userNameVm.ifEmpty { currentUser?.displayName.orEmpty() }
@@ -555,18 +558,35 @@ fun ProfileScreen(
                     Spacer(Modifier.height(8.dp))
 
                     TextButton(
-                        onClick  = {
-                            viewModel.signOut()
-                            onSignOut()
-                        },
+                        onClick  = { viewModel.signOut(onComplete = onSignOut) },
+                        enabled  = !isSigningOut,
                         modifier = Modifier.fillMaxWidth(),
                     ) {
-                        Text(
-                            text      = "Sign Out",
-                            style     = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
-                            color     = SignOutRed,
-                            textAlign = TextAlign.Center,
-                        )
+                        if (isSigningOut) {
+                            Row(
+                                verticalAlignment     = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center,
+                            ) {
+                                CircularProgressIndicator(
+                                    modifier  = Modifier.size(16.dp),
+                                    strokeWidth = 2.dp,
+                                    color     = SignOutRed,
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text(
+                                    text  = "Signing out…",
+                                    style = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                    color = SignOutRed,
+                                )
+                            }
+                        } else {
+                            Text(
+                                text      = "Sign Out",
+                                style     = MaterialTheme.typography.bodyMedium.copy(fontWeight = FontWeight.Medium),
+                                color     = SignOutRed,
+                                textAlign = TextAlign.Center,
+                            )
+                        }
                     }
 
                 }

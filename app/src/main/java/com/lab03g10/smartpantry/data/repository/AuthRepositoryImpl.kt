@@ -13,7 +13,8 @@ import javax.inject.Singleton
 
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
-    private val firebaseAuth: FirebaseAuth
+    private val firebaseAuth: FirebaseAuth,
+    private val backupRepository: BackupRepository,
 ) : AuthRepository {
 
     override fun observeCurrentUser(): Flow<FirebaseUser?> = callbackFlow {
@@ -49,8 +50,12 @@ class AuthRepositoryImpl @Inject constructor(
 
     override suspend fun signIn(email: String, password: String): Result<FirebaseUser?> {
         return try {
-            val result = firebaseAuth.signInWithEmailAndPassword(email, password).await()
-            Result.success(result.user)
+            val user = firebaseAuth.signInWithEmailAndPassword(email, password).await().user
+                ?: return Result.failure(IllegalStateException("Null user after auth"))
+            // Pull AFTER successful auth so request.auth.uid is set when
+            // the Firestore security rule evaluates the read.
+            backupRepository.pullSnapshot(user.uid)
+            Result.success(user)
         } catch (e: Exception) {
             Result.failure(e)
         }
@@ -65,7 +70,12 @@ class AuthRepositoryImpl @Inject constructor(
         }
     }
 
-    override fun signOut() {
+    override suspend fun signOut() {
+        // Push BEFORE clearing auth so the security rule still passes
+        // (request.auth.uid must match the document path uid).
+        firebaseAuth.currentUser?.uid?.let { uid ->
+            backupRepository.pushSnapshot(uid)
+        }
         firebaseAuth.signOut()
     }
 

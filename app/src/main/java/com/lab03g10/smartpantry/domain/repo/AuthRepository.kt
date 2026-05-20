@@ -25,9 +25,11 @@ interface AuthRepository {
     suspend fun sendPasswordReset(email: String): Result<Unit>
 
     /**
-     * Signs the current user out.
+     * Signs the current user out. Suspending because the impl pushes a
+     * Room snapshot to Firestore before clearing local auth state
+     * (Phase 16 — Firebase one-way backup).
      */
-    fun signOut()
+    suspend fun signOut()
 
     /**
      * Helper to check if a user is currently sessioned.
