@@ -17,9 +17,12 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.ShowChart
 import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.material.icons.outlined.WaterDrop
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ElevatedCard
@@ -586,12 +589,34 @@ private fun SevenDayChart(
 
 // alert history row
 
+// Breach-kind palette — mirrors NotificationsScreen so the two surfaces
+// stay in sync. SensorTickWorker.describeBreach() prefixes each part with
+// "Temperature ", "Humidity ", or "Light "; on multi-dimension breaches
+// priority temp > humidity > light puts the food-safety dimension first.
+private data class BreachAssets(
+    val circleBg: Color,
+    val iconTint: Color,
+    val icon:     ImageVector,
+)
+
+private val TempBreachAssets     = BreachAssets(Color(0xFFFFEDEA), Color(0xFFBA1A1A), Icons.Outlined.Thermostat)
+private val HumidityBreachAssets = BreachAssets(Color(0xFFE3F2FD), Color(0xFF1976D2), Icons.Outlined.WaterDrop)
+private val LightBreachAssets    = BreachAssets(Color(0xFFFFF9C4), Color(0xFFF57F17), Icons.Outlined.LightMode)
+
+private fun breachAssets(body: String): BreachAssets = when {
+    "Temperature" in body -> TempBreachAssets
+    "Humidity" in body    -> HumidityBreachAssets
+    "Light" in body       -> LightBreachAssets
+    else                  -> TempBreachAssets
+}
+
 @Composable
 private fun AlertHistoryRow(
     title:       String,
     description: String,
     timestamp:   String,
 ) {
+    val assets = breachAssets(description)
     Row(
         modifier              = Modifier
             .fillMaxWidth()
@@ -606,14 +631,14 @@ private fun AlertHistoryRow(
             Surface(
                 modifier = Modifier.size(36.dp),
                 shape    = CircleShape,
-                color    = Color(0xFFFFEDEA),
+                color    = assets.circleBg,
             ) {
                 Box(contentAlignment = Alignment.Center) {
                     Icon(
-                        imageVector        = Icons.Outlined.Thermostat,
+                        imageVector        = assets.icon,
                         contentDescription = null,
                         modifier           = Modifier.size(18.dp),
-                        tint               = Color(0xFFBA1A1A),
+                        tint               = assets.iconTint,
                     )
                 }
             }

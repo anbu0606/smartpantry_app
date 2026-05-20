@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.Inventory2
 import androidx.compose.material.icons.outlined.LightMode
 import androidx.compose.material.icons.outlined.Schedule
 import androidx.compose.material.icons.outlined.Thermostat
+import androidx.compose.material.icons.outlined.WaterDrop
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -60,30 +61,37 @@ import java.util.concurrent.TimeUnit
 private val SectionLabelGreen = Color(0xFF0F6E56)
 private val LabelGrey         = Color(0xFF888888)
 
-private val TempAlertCircleBg  = Color(0xFFFFEDEA)
-private val TempAlertIcon      = Color(0xFFBA1A1A)
-private val LightAlertCircleBg = Color(0xFFFFF9C4)   // warm yellow
-private val LightAlertIcon     = Color(0xFFF57F17)    // amber
-private val ExpiryCircleBg     = Color(0xFFFFF3E0)
-private val ExpiryIcon         = Color(0xFFF57F17)
-private val LowStockCircleBg   = Color(0xFFE8F5E9)
-private val LowStockIcon       = Color(0xFF2E7D32)
+private val TempAlertCircleBg     = Color(0xFFFFEDEA)
+private val TempAlertIcon         = Color(0xFFBA1A1A)
+private val LightAlertCircleBg    = Color(0xFFFFF9C4)   // warm yellow
+private val LightAlertIcon        = Color(0xFFF57F17)    // amber
+private val HumidityAlertCircleBg = Color(0xFFE3F2FD)   // pale blue
+private val HumidityAlertIcon     = Color(0xFF1976D2)    // blue 700
+private val ExpiryCircleBg        = Color(0xFFFFF3E0)
+private val ExpiryIcon            = Color(0xFFF57F17)
+private val LowStockCircleBg      = Color(0xFFE8F5E9)
+private val LowStockIcon          = Color(0xFF2E7D32)
 
 // Notification type — mapped from NotificationEntity.type string in toIconBucket().
-private enum class NotifType { TEMP_ALERT, LIGHT_ALERT, EXPIRY, LOW_STOCK, SHOPPING }
+private enum class NotifType { TEMP_ALERT, HUMIDITY_ALERT, LIGHT_ALERT, EXPIRY, LOW_STOCK, SHOPPING }
 
-/**
- * Maps the persisted `NotificationEntity.type` string to the local icon bucket.
- * SENSOR_BREACH collapses to TEMP_ALERT because the entity doesn't distinguish
- * temperature vs humidity vs light breaches — a future schema change could
- * split this.
- */
 private fun NotificationEntity.toIconBucket(): NotifType = when (type) {
     "EXPIRY_SOON"   -> NotifType.EXPIRY
-    "SENSOR_BREACH" -> NotifType.TEMP_ALERT
     "LOW_STOCK"     -> NotifType.LOW_STOCK
     "SHOPPING"      -> NotifType.SHOPPING
+    "SENSOR_BREACH" -> sensorBreachBucket(body)
     else            -> NotifType.EXPIRY
+}
+
+// SensorTickWorker.describeBreach() prefixes each part with "Temperature ",
+// "Humidity ", or "Light "; multi-dimension breaches join parts with "; ".
+// Priority order temp > humidity > light keeps the food-safety-critical
+// dimension on the icon when more than one breach fires at once.
+private fun sensorBreachBucket(body: String): NotifType = when {
+    "Temperature" in body -> NotifType.TEMP_ALERT
+    "Humidity" in body    -> NotifType.HUMIDITY_ALERT
+    "Light" in body       -> NotifType.LIGHT_ALERT
+    else                  -> NotifType.TEMP_ALERT
 }
 
 /**
@@ -333,11 +341,12 @@ private data class NotifAssets(
 
 @Composable
 private fun notifTypeAssets(type: NotifType): NotifAssets = when (type) {
-    NotifType.TEMP_ALERT  -> NotifAssets(TempAlertCircleBg,  TempAlertIcon,  Icons.Outlined.Thermostat)
-    NotifType.LIGHT_ALERT -> NotifAssets(LightAlertCircleBg, LightAlertIcon, Icons.Outlined.LightMode)
-    NotifType.EXPIRY      -> NotifAssets(ExpiryCircleBg,     ExpiryIcon,     Icons.Outlined.Schedule)
-    NotifType.LOW_STOCK   -> NotifAssets(LowStockCircleBg,   LowStockIcon,   Icons.Outlined.Inventory2)
-    NotifType.SHOPPING    -> NotifAssets(LowStockCircleBg,   LowStockIcon,   Icons.Filled.ShoppingCart)
+    NotifType.TEMP_ALERT     -> NotifAssets(TempAlertCircleBg,     TempAlertIcon,     Icons.Outlined.Thermostat)
+    NotifType.HUMIDITY_ALERT -> NotifAssets(HumidityAlertCircleBg, HumidityAlertIcon, Icons.Outlined.WaterDrop)
+    NotifType.LIGHT_ALERT    -> NotifAssets(LightAlertCircleBg,    LightAlertIcon,    Icons.Outlined.LightMode)
+    NotifType.EXPIRY         -> NotifAssets(ExpiryCircleBg,        ExpiryIcon,        Icons.Outlined.Schedule)
+    NotifType.LOW_STOCK      -> NotifAssets(LowStockCircleBg,      LowStockIcon,      Icons.Outlined.Inventory2)
+    NotifType.SHOPPING       -> NotifAssets(LowStockCircleBg,      LowStockIcon,      Icons.Filled.ShoppingCart)
 }
 
 // Previews
