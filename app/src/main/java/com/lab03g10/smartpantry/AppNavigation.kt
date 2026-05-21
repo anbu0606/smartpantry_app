@@ -113,7 +113,10 @@ private enum class BottomTab(
 private val bottomBarRoutes: Set<String> = BottomTab.entries.map { it.route }.toSet()
 
 @Composable
-fun AppNavigation() {
+fun AppNavigation(
+    initialFoodId: String? = null,
+    onFoodIdConsumed: () -> Unit = {},
+) {
     val navController  = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentRoute   = backStackEntry?.destination?.route
@@ -140,6 +143,16 @@ fun AppNavigation() {
             navController.navigate(Route.LOGIN) {
                 popUpTo(0) { inclusive = true }
             }
+        }
+    }
+
+    // Deep-link from notification tap: navigate to FoodDetail once the user is authenticated.
+    LaunchedEffect(initialFoodId, isAuthenticated) {
+        if (initialFoodId != null && isAuthenticated) {
+            navController.navigate(Route.foodDetail(initialFoodId)) {
+                launchSingleTop = true
+            }
+            onFoodIdConsumed()
         }
     }
 
