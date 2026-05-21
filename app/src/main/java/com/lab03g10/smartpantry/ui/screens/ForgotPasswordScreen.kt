@@ -78,8 +78,7 @@ fun ForgotPasswordScreen(
     val isEmailSent by viewModel.isEmailSent.collectAsState()
     val error by viewModel.error.collectAsState()
 
-    // Basic client-side validation for the button enable state
-    val isValid = email.contains("@") && email.contains(".")
+    val isValid = email.isNotEmpty() && android.util.Patterns.EMAIL_ADDRESS.matcher(email).matches()
 
     Scaffold(
         topBar = {
