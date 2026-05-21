@@ -8,6 +8,7 @@ import com.lab03g10.smartpantry.domain.repo.PreferenceRepository
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
 import java.util.Calendar
+import java.util.TimeZone
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -47,7 +48,7 @@ class ExpiryNotifier @Inject constructor(
         }
     }
 
-    private fun startOfDay(): Long = Calendar.getInstance().apply {
+    private fun startOfDay(): Long = Calendar.getInstance(TimeZone.getTimeZone("UTC")).apply {
         set(Calendar.HOUR_OF_DAY, 0)
         set(Calendar.MINUTE, 0)
         set(Calendar.SECOND, 0)
