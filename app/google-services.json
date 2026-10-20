@@ -1,0 +1,47 @@
+{
+  "project_info": {
+    "project_number": "218320707597",
+    "project_id": "smartpantry-9de23",
+    "storage_bucket": "smartpantry-9de23.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:218320707597:android:6822b2d17f0036a347b544",
+        "android_client_info": {
+          "package_name": "com.lab03g10.smartpantry"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "218320707597-n77qd0hnc3rus1bbvuaeefp7bnu492r5.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lab03g10.smartpantry",
+            "certificate_hash": "18899961561bd2512b6df00f720eccfd753107fd"
+          }
+        },
+        {
+          "client_id": "218320707597-27fs0ivqlp1jatdg01ae9ur9ga1d3gam.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBGfIG2v8lYuDsfBz7dkeMqrDpZ_NMF5UQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "218320707597-27fs0ivqlp1jatdg01ae9ur9ga1d3gam.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
